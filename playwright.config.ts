@@ -15,6 +15,10 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } },
     },
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
+    {
+      name: 'iphone-webkit',
+      use: { ...devices['iPhone 13'], viewport: { width: 393, height: 852 } },
+    },
   ],
   webServer: {
     command: 'npm run build && npm start',

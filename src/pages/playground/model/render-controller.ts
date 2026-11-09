@@ -1,4 +1,11 @@
-import type { Job, Palette, Result, RGB, Settings } from '@/shared/lib/renderer';
+import {
+  type Job,
+  type Palette,
+  render,
+  type Result,
+  type RGB,
+  type Settings,
+} from '@/shared/lib/renderer';
 
 interface Callbacks {
   pending: () => void;
@@ -9,7 +16,7 @@ interface Callbacks {
 
 /** Browser-owned queue: only one job runs, and only the newest revision can publish. */
 export class RenderController {
-  private worker: Worker;
+  private worker: Worker | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private revision = 0;
   private busy = false;
@@ -18,6 +25,9 @@ export class RenderController {
   private pending: { source: HTMLImageElement; settings: Settings; palette: Palette } | undefined;
 
   constructor(private callbacks: Callbacks) {
+    // Older WebKit builds cannot render a canvas inside a worker.
+    // Keep the same throttled queue and renderer on the main thread in that case.
+    if (typeof OffscreenCanvas === 'undefined' || typeof Worker === 'undefined') return;
     this.worker = new Worker(new URL('../../../shared/lib/renderer/worker.ts', import.meta.url), {
       type: 'module',
     });
@@ -85,7 +95,14 @@ export class RenderController {
       const job: Job = { id: this.revision, image, settings, palette: colors };
       this.busy = true;
       this.lastStarted = performance.now();
-      this.worker.postMessage(job, [image.data.buffer]);
+      if (this.worker) {
+        this.worker.postMessage(job, [image.data.buffer]);
+      } else {
+        const result = render(job);
+        this.busy = false;
+        if (!this.disposed && result.id === this.revision) this.callbacks.complete(result);
+        this.schedule();
+      }
     } catch (error) {
       this.busy = false;
       this.callbacks.error(error instanceof Error ? error.message : 'Ошибка обработки.');
@@ -96,6 +113,6 @@ export class RenderController {
     this.disposed = true;
     clearTimeout(this.timer);
     this.pending = undefined;
-    this.worker.terminate();
+    this.worker?.terminate();
   }
 }

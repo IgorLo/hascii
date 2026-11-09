@@ -157,7 +157,7 @@ export class EditorModel {
   }
 
   loadSample() {
-    return this.loadImage('/sample.png', 'reference');
+    return this.loadImage('/sample-husky.png', 'husky');
   }
 
   loadFile(file?: File) {

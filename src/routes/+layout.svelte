@@ -1,5 +1,6 @@
 <script lang="ts">
   import 'svelte-ascii-ui/styles.css';
+  import 'svelte-ascii-ui/fonts.css';
   import '@/app/styles/app.css';
 
   import type { Snippet } from 'svelte';
@@ -11,7 +12,6 @@
 <Theme
   palette="plum"
   size="s"
-  font="Consolas, 'Lucida Console', 'Courier New', monospace"
   colors={{
     background: '#120c10',
     surface: '#211219',

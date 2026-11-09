@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Button, FileInput, Link, Panel } from 'svelte-ascii-ui';
+  import { MediaQuery } from 'svelte/reactivity';
+  import { Button, Drawer, FileInput, Link, Panel, Select } from 'svelte-ascii-ui';
 
   import type { Settings } from '@/shared/lib/renderer';
   import { asset, resolve } from '$app/paths';
@@ -11,7 +12,18 @@
   const editor = new EditorModel();
   let original: HTMLCanvasElement;
   let result: HTMLCanvasElement;
-  let view = $state('side');
+  const mobile = new MediaQuery('(max-width: 760px)', false);
+  let selectedView = $state<string | null>(null);
+  const view = $derived(selectedView ?? (mobile.current ? 'result' : 'side'));
+  let toolsOpen = $state(false);
+  let section = $state<'photo' | 'tone' | 'color' | 'ascii'>('photo');
+  const sections = [
+    { value: 'photo', label: 'Фото', title: 'Фото и пресеты' },
+    { value: 'tone', label: 'Тон', title: 'Холст и тон' },
+    { value: 'color', label: 'Цвет', title: 'Цвет и дизеринг' },
+    { value: 'ascii', label: 'ASCII', title: 'Символы и фон' },
+  ] as const;
+  const sectionTitle = $derived(sections.find((item) => item.value === section)!.title);
   let dragging = $state(false);
   const modes: { value: Settings['mode']; label: string }[] = [
     { value: 'pixels', label: 'Пиксели' },
@@ -34,6 +46,42 @@
   />
 </svelte:head>
 
+{#snippet upload()}
+  <section
+    id="drop"
+    class={['drop-zone', { dragging }]}
+    aria-label="Загрузка изображения"
+    ondragover={(event) => {
+      event.preventDefault();
+      dragging = true;
+    }}
+    ondragleave={() => (dragging = false)}
+    ondrop={(event) => {
+      event.preventDefault();
+      dragging = false;
+      editor.loadFile(event.dataTransfer?.files[0]);
+    }}
+  >
+    <FileInput
+      id="file"
+      size="s"
+      accept="image/*"
+      aria-label="Загрузить изображение"
+      chooseLabel="[+] Загрузить изображение"
+      emptyText="PNG, JPG, WebP"
+      clearLabel="Убрать выбор"
+      onchange={(event) => {
+        editor.loadFile(event.currentTarget.files?.[0]);
+        event.currentTarget.value = '';
+      }}
+    />
+    <p class="hint">или перетащи его сюда · до 40 МБ</p>
+  </section>
+  <Button id="sample" size="s" onclick={() => void editor.loadSample()}
+    >&lt; Вернуть картинку-пример</Button
+  >
+{/snippet}
+
 <header class="app-header">
   <h1 class="brand">
     <img class="brand-image" src={asset('/hascii-mark.png')} alt="" width="900" height="656" />
@@ -45,56 +93,27 @@
   </h1>
   <Button
     id="export"
+    aria-label="Сохранить PNG"
     size="s"
     variant="primary"
     disabled={!editor.canExport}
-    onclick={() => editor.exportPng()}>Сохранить PNG</Button
+    onclick={() => editor.exportPng()}>{mobile.current ? 'PNG ↓' : 'Сохранить PNG'}</Button
   >
 </header>
 
 <main class="workspace">
-  <aside aria-label="Настройки изображения">
-    <div class="intro">
-      <p>Пиксели, символы и немного контролируемого шума.</p>
-    </div>
-    <section
-      id="drop"
-      class={['drop-zone', { dragging }]}
-      aria-label="Загрузка изображения"
-      ondragover={(event) => {
-        event.preventDefault();
-        dragging = true;
-      }}
-      ondragleave={() => (dragging = false)}
-      ondrop={(event) => {
-        event.preventDefault();
-        dragging = false;
-        editor.loadFile(event.dataTransfer?.files[0]);
-      }}
-    >
-      <FileInput
-        id="file"
-        size="s"
-        accept="image/*"
-        aria-label="Загрузить изображение"
-        chooseLabel="[+] Загрузить изображение"
-        emptyText="PNG, JPG, WebP"
-        clearLabel="Убрать выбор"
-        onchange={(event) => {
-          editor.loadFile(event.currentTarget.files?.[0]);
-          event.currentTarget.value = '';
-        }}
-      />
-      <p class="hint">или перетащи его сюда · до 40 МБ</p>
-    </section>
-    <Button id="sample" size="s" onclick={() => void editor.loadSample()}
-      >&lt; Вернуть картинку-пример</Button
-    >
-    <Controls {editor} />
-    <footer class="hint">
-      Изображение остаётся на устройстве.<br />Только импорт палитры обращается к Lospec.
-    </footer>
-  </aside>
+  {#if !mobile.current}
+    <aside aria-label="Настройки изображения">
+      <div class="intro">
+        <p>Пиксели, символы и немного контролируемого шума.</p>
+      </div>
+      {@render upload()}
+      <Controls {editor} />
+      <footer class="hint">
+        Изображение остаётся на устройстве.<br />Только импорт палитры обращается к Lospec.
+      </footer>
+    </aside>
+  {/if}
 
   <article class="preview-area" aria-label="Превью изображения">
     <div class="toolbar">
@@ -112,19 +131,28 @@
       <span id="status" role="status">{editor.status}</span>
     </div>
     <div class="preview-toolbar">
-      <span>Превью</span>
-      <div class="button-row" role="group" aria-label="Расположение превью">
-        {#each views as item (item.value)}
-          <Button
-            size="s"
-            data-view={item.value}
-            aria-pressed={view === item.value}
-            variant={view === item.value ? 'primary' : 'default'}
-            onclick={() => (view = item.value)}>{item.label}</Button
-          >
-        {/each}
-      </div>
-      <small class="hint">Расположение не влияет на PNG</small>
+      {#if mobile.current}
+        <Select
+          size="s"
+          aria-label="Расположение превью"
+          options={views.map((item) => ({ value: item.value, label: item.label }))}
+          bind:value={() => view, (value) => (selectedView = value || 'result')}
+        />
+      {:else}
+        <span>Превью</span>
+        <div class="button-row" role="group" aria-label="Расположение превью">
+          {#each views as item (item.value)}
+            <Button
+              size="s"
+              data-view={item.value}
+              aria-pressed={view === item.value}
+              variant={view === item.value ? 'primary' : 'default'}
+              onclick={() => (selectedView = item.value)}>{item.label}</Button
+            >
+          {/each}
+        </div>
+        <small class="hint">Расположение не влияет на PNG</small>
+      {/if}
     </div>
     <div id="previews" class="previews" data-view={view} aria-busy={!editor.canExport}>
       <figure class="original-figure" hidden={view === 'result'}>
@@ -158,15 +186,82 @@
         сохранить линии и границы; «По яркости» даёт более ровную текстовую фактуру.
       </p>
       <p>
-        Пример уже обработан: он показывает фактуру, но для экспериментов лучше загрузить обычную
-        фотографию. Размытие и сглаживание букв добавляют промежуточные оттенки даже при
-        ограниченной палитре.
+        Пример с хаски сгенерирован. Можно загрузить свою фотографию. Размытие и сглаживание букв
+        добавляют промежуточные оттенки даже при ограниченной палитре.
       </p>
     </div>
   </article>
 </main>
 
+{#if mobile.current}
+  <nav class="mobile-tools" aria-label="Инструменты изображения">
+    {#each sections as item (item.value)}
+      <Button
+        size="s"
+        fullWidth
+        style="min-height: 48px"
+        aria-haspopup="dialog"
+        data-tool={item.value}
+        onclick={(event) => {
+          event.currentTarget.focus();
+          section = item.value;
+          toolsOpen = true;
+        }}
+      >
+        {item.label}
+      </Button>
+    {/each}
+  </nav>
+  <Drawer
+    data-mobile-settings
+    bind:open={toolsOpen}
+    title={sectionTitle}
+    closeLabel="Закрыть настройки"
+    style="width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);"
+  >
+    <div class="mobile-settings">
+      {#if section === 'photo'}{@render upload()}{/if}
+      <Controls {editor} {section} />
+      {#if editor.error}<p class="error" role="alert">{editor.error}</p>{/if}
+    </div>
+    {#snippet footer()}
+      <div class="mobile-settings-footer">
+        <span class="hint" role="status">{editor.status}</span>
+        <Button fullWidth size="m" style="min-height: 48px" onclick={() => (toolsOpen = false)}>
+          Показать результат
+        </Button>
+      </div>
+    {/snippet}
+  </Drawer>
+{/if}
+
 <style>
+  .mobile-tools {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 10px max(8px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+    background: var(--bg);
+    border-top: 1px dashed var(--muted);
+  }
+  .mobile-settings {
+    min-width: 0;
+    display: grid;
+    gap: 16px;
+    padding-block: 8px;
+  }
+  .mobile-settings-footer {
+    width: 100%;
+    display: grid;
+    gap: 8px;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
   .app-header {
     min-height: 88px;
     display: flex;
@@ -198,9 +293,10 @@
   }
   .workspace {
     display: grid;
-    grid-template-columns: 360px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
   }
   aside {
+    min-width: 0;
     display: grid;
     align-content: start;
     gap: 18px;
@@ -328,24 +424,51 @@
       padding: 20px;
     }
   }
-  @media (max-width: 700px) {
+  @media (max-width: 760px) {
     .app-header {
-      padding: 16px;
-      gap: 12px;
+      min-height: 72px;
+      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 12px
+        max(12px, env(safe-area-inset-left));
+      gap: 8px;
     }
     .brand {
+      font-size: clamp(22px, 6vw, 32px);
+      gap: 8px;
       margin-right: auto;
     }
     .workspace {
       display: flex;
       flex-direction: column;
+      padding-bottom: calc(88px + env(safe-area-inset-bottom));
     }
     aside {
       border-right: none;
       padding: 20px 16px;
     }
     .preview-area {
-      padding: 20px 16px;
+      padding: 16px 12px;
+    }
+    .note {
+      display: none;
+    }
+    .preview-toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+    }
+    .previews[data-view='side'] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .previews[data-view='result'] canvas {
+      max-height: 55dvh;
+      object-fit: contain;
+    }
+    .toolbar {
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .recipe {
+      overflow-wrap: anywhere;
     }
   }
 </style>

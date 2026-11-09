@@ -1,3 +1,4 @@
+import { Canvas, ImageData } from '@napi-rs/canvas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Job, Result } from '@/shared/lib/renderer';
@@ -25,6 +26,7 @@ const palette = { id: 'x', name: 'x', author: 'x', colors: ['ffffff'] };
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
   vi.stubGlobal('Worker', FakeWorker);
+  vi.stubGlobal('OffscreenCanvas', Canvas);
   vi.stubGlobal('document', {
     createElement: () => ({
       width: 0,
@@ -45,6 +47,32 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('latest-render queue', () => {
+  it('renders without OffscreenCanvas and coalesces pending changes', () => {
+    vi.stubGlobal('OffscreenCanvas', undefined);
+    vi.stubGlobal('ImageData', ImageData);
+    vi.stubGlobal('document', { createElement: () => new Canvas(1, 1) });
+    const source = Object.assign(new Canvas(4, 4), { naturalWidth: 4, naturalHeight: 4 });
+    source.getContext('2d').fillRect(0, 0, 4, 4);
+    const complete = vi.fn();
+    const error = vi.fn();
+    const controller = new RenderController({
+      pending: vi.fn(),
+      original: vi.fn(),
+      complete,
+      error,
+    });
+    controller.request(source as unknown as HTMLImageElement, { ...defaults }, palette);
+    controller.request(
+      source as unknown as HTMLImageElement,
+      { ...defaults, brightness: 10 },
+      palette,
+    );
+    vi.advanceTimersByTime(180);
+    expect(error).not.toHaveBeenCalled();
+    expect(complete).toHaveBeenCalledOnce();
+    expect(complete.mock.calls[0][0].image.width).toBe(4);
+    controller.destroy();
+  });
   it('coalesces changes, discards stale replies and renders the latest revision', () => {
     const complete = vi.fn();
     const controller = new RenderController({

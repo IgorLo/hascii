@@ -1,11 +1,14 @@
 @import 'tailwindcss';
 
 html {
-  min-width: 320px;
+  width: 100%;
   background: #120c10;
 }
 body {
   margin: 0;
+}
+html:has([data-mobile-settings][open]) {
+  overflow: hidden;
 }
 * {
   box-sizing: border-box;
