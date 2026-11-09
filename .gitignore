@@ -1,0 +1,14 @@
+node_modules/
+.svelte-kit/
+build/
+coverage/
+test-results/
+playwright-report/
+.superpowers/
+work/
+outputs/blog/
+*.zip
+*.log
+.env
+.env.*
+!.env.example

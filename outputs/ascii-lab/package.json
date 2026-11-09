@@ -1,0 +1,1 @@
+{"name":"ascii-lab-prototype","private":true,"type":"module","scripts":{"build":"tsc","start":"node server.mjs"},"devDependencies":{"typescript":"^5.9.3"}}
