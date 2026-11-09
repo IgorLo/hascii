@@ -3,7 +3,7 @@
   import { Button, FileInput, Link, Panel } from 'svelte-ascii-ui';
 
   import type { Settings } from '@/shared/lib/renderer';
-  import { resolve } from '$app/paths';
+  import { asset, resolve } from '$app/paths';
 
   import { EditorModel } from '../model/editor.svelte';
   import Controls from './Controls.svelte';
@@ -36,6 +36,7 @@
 
 <header class="app-header">
   <h1 class="brand">
+    <img class="brand-image" src={asset('/hascii-mark.png')} alt="" width="900" height="656" />
     <Link
       href={resolve('/')}
       aria-label="HASCII — главная"
@@ -176,12 +177,24 @@
     border-bottom: 1px dashed var(--muted);
   }
   .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     color: var(--text);
     font-size: 40px;
     line-height: 1;
     font-weight: 400;
     margin: 0 auto 0 0;
     text-decoration: none;
+  }
+  .brand-image {
+    display: block;
+    height: 1em;
+    width: auto;
+    box-sizing: border-box;
+    padding: 2px;
+    border: 1px dashed var(--muted);
+    image-rendering: pixelated;
   }
   .workspace {
     display: grid;
