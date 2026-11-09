@@ -1,0 +1,63 @@
+{
+  "name": "hascii",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite dev --host 127.0.0.1 --port 4173 --strictPort",
+    "build": "vite build",
+    "start": "node scripts/start.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "prepare": "husky && svelte-kit sync",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "format": "prettier --write .",
+    "lint": "prettier --check . && eslint . --max-warnings 0 && steiger ./src --fail-on-warnings",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "verify": "npm run lint && npm run check && npm run test && npm run test:e2e"
+  },
+  "dependencies": {
+    "svelte-ascii-ui": "0.2.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
+    "@eslint/js": "^10.0.1",
+    "@feature-sliced/steiger-plugin": "^0.8.0",
+    "@napi-rs/canvas": "^1.1.0",
+    "@playwright/test": "1.63.0",
+    "@sveltejs/adapter-node": "^5.5.4",
+    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "^24.19.0",
+    "eslint": "10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-simple-import-sort": "^14.0.0",
+    "eslint-plugin-svelte": "^3.19.0",
+    "globals": "^17.6.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "3.9.9",
+    "prettier-plugin-svelte": "^4.1.0",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "steiger": "0.7.0",
+    "svelte": "5.57.3",
+    "svelte-check": "4.7.6",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.60.1",
+    "vite": "8.3.1",
+    "vitest": "4.1.11"
+  },
+  "lint-staged": {
+    "*.{js,ts,svelte}": [
+      "prettier --write",
+      "eslint --fix --max-warnings 0"
+    ],
+    "*.{json,md,css,html,yml,yaml}": "prettier --write"
+  }
+}
