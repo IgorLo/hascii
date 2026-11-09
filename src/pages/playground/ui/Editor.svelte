@@ -35,12 +35,13 @@
 </svelte:head>
 
 <header class="app-header">
-  <span class="brand"
-    ><Link href={resolve('/')} aria-label="hascii — главная"
-      ><span aria-hidden="true">&gt;_</span>hascii</Link
-    ></span
-  >
-  <span class="tag">LOCAL IMAGE PLAYGROUND</span>
+  <h1 class="brand">
+    <Link
+      href={resolve('/')}
+      aria-label="HASCII — главная"
+      style="font-size: inherit; line-height: inherit">HASCII</Link
+    >
+  </h1>
   <Button
     id="export"
     size="s"
@@ -53,8 +54,6 @@
 <main class="workspace">
   <aside aria-label="Настройки изображения">
     <div class="intro">
-      <span class="eyebrow">// ИЗОБРАЖЕНИЕ → ФАКТУРА</span>
-      <h1>Меньше цветов.<br />Больше характера.</h1>
       <p>Пиксели, символы и немного контролируемого шума.</p>
     </div>
     <section
@@ -168,6 +167,7 @@
 
 <style>
   .app-header {
+    min-height: 88px;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -177,18 +177,11 @@
   }
   .brand {
     color: var(--text);
-    font-size: 24px;
+    font-size: 40px;
+    line-height: 1;
+    font-weight: 400;
+    margin: 0 auto 0 0;
     text-decoration: none;
-  }
-  .brand span {
-    color: var(--accent);
-    margin-right: 0.4ch;
-  }
-  .tag {
-    color: var(--muted);
-    font-size: 10px;
-    letter-spacing: 1px;
-    flex: 1;
   }
   .workspace {
     display: grid;
@@ -200,17 +193,6 @@
     gap: 18px;
     padding: 28px 20px;
     border-right: 1px dashed var(--muted);
-  }
-  .eyebrow {
-    color: var(--accent);
-    font-size: 10px;
-  }
-  h1 {
-    font-size: 24px;
-    line-height: 1.25;
-    letter-spacing: -1px;
-    font-weight: 400;
-    margin: 16px 0;
   }
   .intro p {
     color: var(--muted);
@@ -318,7 +300,7 @@
   @media (min-width: 1000px) {
     aside,
     .preview-area {
-      max-height: calc(100dvh - 81px);
+      max-height: calc(100dvh - 88px);
       overflow-y: auto;
     }
   }
@@ -337,9 +319,6 @@
     .app-header {
       padding: 16px;
       gap: 12px;
-    }
-    .tag {
-      display: none;
     }
     .brand {
       margin-right: auto;
