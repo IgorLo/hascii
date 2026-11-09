@@ -4,10 +4,16 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  plugins: [tailwindcss(), sveltekit({
-    compilerOptions: { runes: ({ filename }) => filename.split(/[/\\]/).includes('node_modules') ? undefined : true },
-    adapter: adapter(),
-    alias: { '@': 'src' },
-  })],
+  plugins: [
+    tailwindcss(),
+    sveltekit({
+      compilerOptions: {
+        runes: ({ filename }) =>
+          filename.split(/[/\\]/).includes('node_modules') ? undefined : true,
+      },
+      adapter: adapter(),
+      alias: { '@': 'src' },
+    }),
+  ],
   test: { include: ['src/**/*.test.ts'], environment: 'node', expect: { requireAssertions: true } },
 });

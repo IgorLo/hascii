@@ -1,0 +1,26 @@
+@import 'tailwindcss';
+
+html {
+  min-width: 320px;
+  background: #120c10;
+}
+body {
+  margin: 0;
+}
+* {
+  box-sizing: border-box;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+a:focus-visible {
+  outline: 2px dashed currentColor;
+  outline-offset: 4px;
+}
+::selection {
+  background: #ed8296;
+  color: #120c10;
+}
