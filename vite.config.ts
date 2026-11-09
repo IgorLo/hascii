@@ -1,4 +1,5 @@
-import adapter from '@sveltejs/adapter-node';
+import nodeAdapter from '@sveltejs/adapter-node';
+import vercelAdapter from '@sveltejs/adapter-vercel';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
@@ -11,7 +12,7 @@ export default defineConfig({
         runes: ({ filename }) =>
           filename.split(/[/\\]/).includes('node_modules') ? undefined : true,
       },
-      adapter: adapter(),
+      adapter: process.env.VERCEL === '1' ? vercelAdapter() : nodeAdapter(),
       alias: { '@': 'src' },
     }),
   ],

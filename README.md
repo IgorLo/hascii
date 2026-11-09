@@ -20,7 +20,15 @@ npm run build
 npm start
 ```
 
-`npm start` по умолчанию слушает только `127.0.0.1:4173`. Переменные `HOST`, `PORT`, `ORIGIN` позволяют изменить адрес. Исходники: [IgorLo/hascii](https://github.com/IgorLo/hascii). Развёртывание на Vercel пока не настроено.
+`npm start` по умолчанию слушает только `127.0.0.1:4173`. Переменные `HOST`, `PORT`, `ORIGIN` позволяют изменить адрес. Исходники: [IgorLo/hascii](https://github.com/IgorLo/hascii).
+
+## Vercel
+
+Импортировать `IgorLo/hascii` в Vercel: framework SvelteKit, корень репозитория, Node.js 24.x, команда сборки `npm run build`, Output Directory — автоматически. Секреты и база данных не нужны.
+
+При системной переменной `VERCEL=1` сборка использует `@sveltejs/adapter-vercel` и создаёт `.vercel/output`: статические ресурсы и серверную функцию, в том числе для импорта Lospec. В настройках Vercel нужно оставить включённым **Automatically expose System Environment Variables**. Само подключение проекта и первый deploy выполняются в Vercel.
+
+Без `VERCEL=1` используется `@sveltejs/adapter-node`: локальные `npm run dev`, `npm run build` и `npm start` работают как раньше. `npm start` запускает именно локальную Node-сборку, не `.vercel/output`. Изображения обрабатываются в браузере при обоих вариантах размещения.
 
 ## Возможности
 
