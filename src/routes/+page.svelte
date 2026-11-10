@@ -2,7 +2,7 @@
   import { Playground } from '@/pages/playground';
 
   const title = 'HASCII';
-  const description = 'Генератор пиксель арта';
+  const description = 'Генератор пиксель-арта';
   const site = 'https://hascii.vercel.app/';
   const image = new URL('hascii-mark.png', site).href;
   const imageAlt = 'Пиксельная хаски HASCII';
