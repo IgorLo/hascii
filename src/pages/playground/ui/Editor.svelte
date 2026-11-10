@@ -38,14 +38,6 @@
   onMount(() => editor.mount(original, result));
 </script>
 
-<svelte:head>
-  <title>hascii — image playground</title>
-  <meta
-    name="description"
-    content="Локальный редактор пикселей и ASCII: палитры, дизеринг и символы. Изображения остаются на устройстве."
-  />
-</svelte:head>
-
 {#snippet upload()}
   <section
     id="drop"

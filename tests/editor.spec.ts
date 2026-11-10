@@ -26,7 +26,7 @@ test.beforeEach(async ({ page }) => {
 test('all rendering modes, presets and preview layouts work', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await expect(page).toHaveTitle(/hascii/);
+  await expect(page).toHaveTitle('HASCII');
   for (const mode of ['ascii', 'overlay', 'pixels']) {
     await page.locator(`[data-mode="${mode}"]`).click();
     await expect(page.locator('#export')).toBeEnabled();
