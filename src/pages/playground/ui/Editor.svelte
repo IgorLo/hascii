@@ -97,7 +97,7 @@
 
 <main class="workspace">
   {#if !mobile.current}
-    <aside aria-label="Настройки изображения">
+    <aside class="aui-scrollbar" aria-label="Настройки изображения">
       <div class="intro">
         <p>Пиксели, символы и немного контролируемого шума.</p>
       </div>
@@ -109,7 +109,7 @@
     </aside>
   {/if}
 
-  <article class="preview-area" aria-label="Превью изображения">
+  <article class="preview-area aui-scrollbar" aria-label="Превью изображения">
     <div class="toolbar">
       <div class="button-row" role="group" aria-label="Режим отрисовки">
         {#each modes as mode (mode.value)}

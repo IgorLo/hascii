@@ -158,7 +158,7 @@
       'Палитра',
       editor.palettes.map((p) => ({ value: p.id, label: p.name })),
     )}
-    <div id="swatches" class="swatches" aria-label={`Цвета палитры ${palette.name}`}>
+    <div id="swatches" class="swatches aui-scrollbar" aria-label={`Цвета палитры ${palette.name}`}>
       {#each palette.colors as color, i (`${i}-${color}`)}<span
           style:--swatch={`#${color}`}
           title={`#${color}`}>█</span

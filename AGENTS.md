@@ -1,5 +1,7 @@
 # hascii
 
+For software projects, resolve the current main commit of https://github.com/IgorLo/igorlo-llm-hub at the start of each task. Read AGENTS.md and its task-relevant links at that exact commit. Keep this revision for the task. If offline, use the last available approved revision and state its SHA; if none is available, say so and use project instructions. Follow project-specific contracts and release rules.
+
 For UI changes, migrations, debugging or package upgrades, read
 `node_modules/svelte-ascii-ui/docs/agents/using.md` for the installed version.
 Follow its ownership and feedback rules; publishing an issue requires user

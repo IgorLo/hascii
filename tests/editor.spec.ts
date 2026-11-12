@@ -106,6 +106,16 @@ test('PICO-8 two-color modes expose their controls and export real PNGs', async 
   }
 });
 
+test('desktop settings scroll with the themed six-pixel gutter', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Desktop settings sidebar.');
+  const sidebar = page.getByRole('complementary', { name: 'Настройки изображения' });
+  const width = await sidebar.evaluate((el) => getComputedStyle(el, '::-webkit-scrollbar').width);
+  expect(width).toBe('6px');
+  await sidebar.hover();
+  await page.mouse.wheel(0, 200);
+  await expect.poll(() => sidebar.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+});
+
 test('desktop settings collapse independently and preserve edited values', async ({
   page,
 }, info) => {
