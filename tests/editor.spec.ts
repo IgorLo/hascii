@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+
+import { Canvas } from '@napi-rs/canvas';
 import { expect, type Page, test } from '@playwright/test';
 
 async function closeTools(page: Page) {
@@ -16,6 +19,21 @@ async function preview(page: Page, value: string) {
   const select = page.getByRole('combobox', { name: 'Расположение превью' });
   if (await select.isVisible()) await select.selectOption(value);
   else await page.locator(`[data-view="${value}"]`).click();
+}
+
+async function uploadWithoutMime(page: Page, name: string, buffer: Buffer) {
+  // setInputFiles infers a MIME type from the extension, so supply the exact
+  // File metadata a phone file picker can produce through the native input.
+  await page.locator('#file').evaluate(
+    (element, file) => {
+      const bytes = Uint8Array.from(atob(file.base64), (character) => character.charCodeAt(0));
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], file.name, { type: '' }));
+      (element as HTMLInputElement).files = transfer.files;
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+    { name, base64: buffer.toString('base64') },
+  );
 }
 
 test.beforeEach(async ({ page }) => {
@@ -109,6 +127,76 @@ test('uploads an image and exports a real PNG', async ({ page }) => {
   const png = Buffer.concat(chunks);
   expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([720, 900]);
+});
+
+test('imports an HEIC photo and exports the processed photo', async ({ page }) => {
+  await tools(page, 'photo');
+  await page.locator('#file').setInputFiles('tests/fixtures/photo.heic');
+  await closeTools(page);
+  await expect(page.locator('#sourceInfo')).toHaveText('1280 × 854', { timeout: 30000 });
+  await expect(page.locator('#export')).toBeEnabled();
+  await expect(page.locator('#error')).toBeEmpty();
+  const downloadReady = page.waitForEvent('download');
+  await page.locator('#export').click();
+  const download = await downloadReady;
+  expect(download.suggestedFilename()).toBe('photo-hascii.png');
+  const stream = await download.createReadStream();
+  if (!stream) throw new Error('Missing HEIC export');
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const png = Buffer.concat(chunks);
+  expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([900, 600]);
+});
+
+test('imports common phone photos with missing or generic MIME types', async ({ page }) => {
+  await tools(page, 'photo');
+  const photos = [
+    { name: 'iphone.JPG', mimeType: 'image/jpeg', format: 'jpeg', width: 16, height: 10 },
+    { name: 'android.jpeg', mimeType: '', format: 'jpeg', width: 14, height: 12 },
+    { name: 'photo.webp', mimeType: 'image/webp', format: 'webp', width: 18, height: 12 },
+    {
+      name: 'photo.png',
+      mimeType: 'application/octet-stream',
+      format: 'png',
+      width: 20,
+      height: 10,
+    },
+  ] as const;
+  for (const photo of photos) {
+    const canvas = new Canvas(photo.width, photo.height);
+    canvas.getContext('2d').fillStyle = '#d94f86';
+    canvas.getContext('2d').fillRect(0, 0, photo.width, photo.height);
+    const buffer =
+      photo.format === 'png' ? canvas.encodeSync('png') : canvas.encodeSync(photo.format);
+    if (photo.mimeType === '') await uploadWithoutMime(page, photo.name, buffer);
+    else
+      await page
+        .locator('#file')
+        .setInputFiles({ name: photo.name, mimeType: photo.mimeType, buffer });
+    await expect(page.locator('#sourceInfo')).toHaveText(`${photo.width} × ${photo.height}`);
+    await expect(page.locator('#export')).toBeEnabled();
+    await expect(page.locator('#error')).toBeEmpty();
+  }
+});
+
+test('imports HEIC without MIME metadata and recovers from a damaged HEIC', async ({ page }) => {
+  await tools(page, 'photo');
+  const heic = await readFile('tests/fixtures/photo.heic');
+  await uploadWithoutMime(page, 'IMG_0001.HEIC', heic);
+  await expect(page.locator('#sourceInfo')).toHaveText('1280 × 854', { timeout: 15000 });
+  await expect(page.locator('#export')).toBeEnabled();
+  await page.locator('#file').setInputFiles({
+    name: 'damaged.heic',
+    mimeType: 'image/heic',
+    buffer: heic.subarray(0, 32),
+  });
+  await expect(page.locator('#error')).toContainText('Не удалось открыть');
+  await expect(page.locator('#sourceInfo')).toHaveText('1280 × 854');
+  await page.locator('#sample').click();
+  await expect(page.locator('#sourceInfo')).toHaveText('1122 × 1402');
+  await expect(page.locator('#error')).toBeEmpty();
+  await expect(page.locator('#export')).toBeEnabled();
 });
 
 test('invalid image does not destroy editor and viewport does not overflow', async ({ page }) => {

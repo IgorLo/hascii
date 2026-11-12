@@ -3,6 +3,7 @@ import { SvelteSet } from 'svelte/reactivity';
 import { builtInPalettes, parsePaletteSlug, validPalette } from '@/shared/lib/palettes';
 import type { Palette, Result, Settings } from '@/shared/lib/renderer';
 
+import { decodePhoto } from './image-import';
 import { RenderController } from './render-controller';
 import { defaults, presetSettings } from './settings';
 
@@ -162,35 +163,31 @@ export class EditorModel {
 
   loadFile(file?: File) {
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      this.error = 'Выбери файл изображения.';
-      return;
-    }
     if (file.size > 40 * 1024 * 1024) {
       this.error = 'Используй изображение до 40 МБ.';
       return;
     }
-    const url = URL.createObjectURL(file);
-    void this.loadImage(url, file.name).finally(() => URL.revokeObjectURL(url));
+    void this.loadImage(file, file.name);
   }
 
-  private async loadImage(url: string, name: string) {
+  private async loadImage(source: string | File, name: string) {
     const version = ++this.loadVersion;
     this.loading = true;
     this.controller?.invalidate();
     this.status = 'Загружаем изображение…';
     this.error = '';
-    const image = new Image();
-    image.src = url;
     try {
-      await image.decode();
+      const image = await decodePhoto(source, () => {
+        if (version === this.loadVersion && !this.disposed) this.status = 'Открываем HEIC…';
+      });
       if (version !== this.loadVersion || this.disposed) return;
       this.source = image;
       this.sourceName = name;
       this.sourceInfo = `${image.naturalWidth} × ${image.naturalHeight}`;
     } catch {
       if (version === this.loadVersion && !this.disposed)
-        this.error = 'Не удалось открыть изображение. Попробуй PNG, JPG или WebP.';
+        this.error =
+          'Не удалось открыть изображение. Файл может быть повреждён — попробуй другую фотографию.';
     } finally {
       if (version === this.loadVersion && !this.disposed) {
         this.loading = false;

@@ -57,10 +57,10 @@
     <FileInput
       id="file"
       size="s"
-      accept="image/*"
+      accept="image/*,.heic,.heif"
       aria-label="Загрузить изображение"
       chooseLabel="[+] Загрузить изображение"
-      emptyText="PNG, JPG, WebP"
+      emptyText="Фото с телефона, HEIC, JPG, PNG, WebP"
       clearLabel="Убрать выбор"
       onchange={(event) => {
         editor.loadFile(event.currentTarget.files?.[0]);

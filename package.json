@@ -21,6 +21,7 @@
     "verify": "npm run lint && npm run check && npm run test && npm run test:e2e"
   },
   "dependencies": {
+    "heic-to": "1.6.7",
     "svelte-ascii-ui": "0.2.0"
   },
   "devDependencies": {
