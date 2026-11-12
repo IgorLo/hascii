@@ -41,6 +41,67 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#export')).toBeEnabled({ timeout: 20000 });
 });
 
+test('PICO-8 two-color modes expose their controls and export real PNGs', async ({ page }) => {
+  await tools(page, 'color');
+  await page.locator('#palette').selectOption('pico-8');
+  await closeTools(page);
+  for (const mode of ['ascii-fx', 'png2xp']) {
+    await page.locator(`[data-mode="${mode}"]`).click();
+    await expect(page.locator('#export')).toBeEnabled();
+    await tools(page, 'ascii');
+    await page.locator('#cellSize').fill('12');
+    await page.locator('#cellAspect').fill('1.5');
+    if (mode === 'ascii-fx') {
+      await page.locator('#allowEmpty').uncheck();
+      await page.locator('#chars').fill('');
+      await expect(page.locator('#error')).toContainText('Добавьте хотя бы один символ');
+      await page.locator('#chars').fill(' ▀▄▌▐█+#');
+    } else {
+      await expect(page.locator('#chars')).toHaveCount(0);
+      await page.locator('#blockShading').uncheck();
+    }
+    await closeTools(page);
+    await expect(page.locator('#export')).toBeEnabled();
+    await expect(page.locator('#error')).toBeEmpty();
+    await expect(page.locator('#recipe')).toContainText('PICO-8');
+    const downloadReady = page.waitForEvent('download');
+    await page.locator('#export').click();
+    const stream = await (await downloadReady).createReadStream();
+    if (!stream) throw new Error('Missing two-color export');
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    const png = Buffer.concat(chunks);
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([720, 900]);
+  }
+});
+
+test('desktop settings collapse independently and preserve edited values', async ({
+  page,
+}, info) => {
+  test.skip(info.project.name !== 'desktop', 'Desktop accordion; mobile uses section drawers.');
+  const tone = page.getByRole('button', { name: '02 / Холст и тон', exact: true });
+  const color = page.getByRole('button', { name: '03 / Цвет и дизеринг', exact: true });
+  await expect(tone).toHaveAttribute('aria-expanded', 'true');
+  await page.locator('#brightness').fill('25');
+  await tone.click();
+  await expect(tone).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#brightness')).toBeHidden();
+  await expect(page.locator('#palette')).toBeVisible();
+  await color.click();
+  await expect(page.locator('#palette')).toBeHidden();
+  await tone.focus();
+  await page.keyboard.press('Enter');
+  await expect(tone).toBeFocused();
+  await expect(page.locator('#brightness')).toHaveValue('25');
+  await expect(color).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('Space');
+  await expect(page.locator('#brightness')).toBeHidden();
+  await tone.click();
+  await color.click();
+  await expect(page.locator('#brightness')).toBeVisible();
+  await expect(page.locator('#export')).toBeEnabled();
+});
+
 test('all rendering modes, presets and preview layouts work', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

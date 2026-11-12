@@ -29,6 +29,8 @@
     { value: 'pixels', label: 'Пиксели' },
     { value: 'ascii', label: 'ASCII' },
     { value: 'overlay', label: 'Фон + ASCII' },
+    { value: 'ascii-fx', label: 'ASCII FX' },
+    { value: 'png2xp', label: 'png2xp' },
   ];
   const views = [
     { value: 'side', label: 'Рядом' },

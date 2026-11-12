@@ -7,7 +7,10 @@ export interface Palette {
   url?: string;
 }
 export interface Settings {
-  mode: 'pixels' | 'ascii' | 'overlay';
+  mode: 'pixels' | 'ascii' | 'overlay' | 'ascii-fx' | 'png2xp';
+  cellSize: number;
+  cellAspect: number;
+  blockShading: boolean;
   resolution: number;
   correction: boolean;
   brightness: number;

@@ -3,6 +3,9 @@ import type { Settings } from '@/shared/lib/renderer';
 export const baseline = ' .,:;!iIl+*tfjrxnuvczXYUJCLQ0OZmwqpdbkhao#MW&8%B@$';
 export const defaults: Settings = {
   mode: 'pixels',
+  cellSize: 8,
+  cellAspect: 1,
+  blockShading: true,
   resolution: 900,
   correction: true,
   brightness: 0,
@@ -74,6 +77,8 @@ export const ranges: Record<
   Exclude<NumericSetting, 'resolution'>,
   { label: string; min: number; max: number; step: number }
 > = {
+  cellSize: { label: 'Ширина ячейки', min: 2, max: 40, step: 1 },
+  cellAspect: { label: 'Высота / ширина ячейки', min: 0.5, max: 2.5, step: 0.1 },
   brightness: { label: 'Яркость', min: -100, max: 100, step: 1 },
   contrast: { label: 'Контраст', min: 0.25, max: 3, step: 0.05 },
   saturation: { label: 'Насыщенность', min: 0, max: 2.5, step: 0.05 },

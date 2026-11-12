@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    Accordion,
     Button,
     Checkbox,
     Field,
@@ -23,6 +24,15 @@
   let paletteUrl = $state('');
   const palette = $derived(editor.palettes.find((p) => p.id === editor.settings.palette)!);
   const charCount = $derived(new Set(Array.from(editor.settings.chars)).size);
+  const twoColor = $derived(['ascii-fx', 'png2xp'].includes(editor.settings.mode));
+  const pixelGrid = $derived(['pixels', 'overlay'].includes(editor.settings.mode));
+  const groups = [
+    { id: 'photo', title: '01 / Отправная точка' },
+    { id: 'tone', title: '02 / Холст и тон' },
+    { id: 'color', title: '03 / Цвет и дизеринг' },
+    { id: 'ascii', title: '04 / Символы' },
+  ];
+  let expanded = $state<string | string[]>(groups.map((group) => group.id));
   type StringSetting = {
     [K in keyof Settings]: Settings[K] extends string ? K : never;
   }[keyof Settings];
@@ -30,7 +40,10 @@
 
 {#snippet range(key: keyof typeof ranges, disabled = false)}
   {@const config = ranges[key]}
-  <Field id={key} label={`${config.label} · ${editor.settings[key]}`}>
+  <Field
+    id={key}
+    label={`${key === 'backgroundOpacity' && twoColor ? 'Непрозрачность фона ячеек' : config.label} · ${editor.settings[key]}`}
+  >
     {#snippet children(control)}
       <Slider
         {...control}
@@ -69,153 +82,171 @@
   </Field>
 {/snippet}
 
-{#if section === 'all' || section === 'photo'}
-  <Panel title="01 / Отправная точка" size="s">
-    <div class="button-grid">
-      {#each presets as preset (preset.value)}
-        <Button size="s" data-preset={preset.value} onclick={() => editor.preset(preset.value)}
-          >{preset.label}</Button
-        >
-      {/each}
-    </div>
-  </Panel>
-{/if}
-
-{#if section === 'all' || section === 'tone'}
-  <Panel title="02 / Холст и тон" size="s">
-    <div class="control-stack">
-      <Field
-        id="resolution"
-        label="Рабочее разрешение"
-        hint="По длинной стороне, без увеличения оригинала. PNG сохраняется в этом размере."
+{#snippet photo()}
+  <div class="button-grid">
+    {#each presets as preset (preset.value)}
+      <Button size="s" data-preset={preset.value} onclick={() => editor.preset(preset.value)}
+        >{preset.label}</Button
       >
-        {#snippet children(control)}
-          <Select
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet tone()}
+  <div class="control-stack">
+    <Field
+      id="resolution"
+      label="Рабочее разрешение"
+      hint="По длинной стороне, без увеличения оригинала. PNG сохраняется в этом размере."
+    >
+      {#snippet children(control)}
+        <Select
+          {...control}
+          size="s"
+          options={[600, 900, 1200, 1600].map((value) => ({
+            value: String(value),
+            label: `${value} px`,
+          }))}
+          bind:value={
+            () => String(editor.settings.resolution),
+            (value) => {
+              if (value) editor.update('resolution', Number(value));
+            }
+          }
+        />
+      {/snippet}
+    </Field>
+    <Checkbox
+      id="correction"
+      size="s"
+      label="Коррекция изображения"
+      bind:checked={() => editor.settings.correction, (value) => editor.update('correction', value)}
+    />
+    {@render range('brightness', !editor.settings.correction)}
+    {@render range('contrast', !editor.settings.correction)}
+    {@render range('saturation', !editor.settings.correction)}
+    <Checkbox
+      id="pixelate"
+      size="s"
+      label="Пикселизация фона / пиксельного режима"
+      disabled={!pixelGrid}
+      bind:checked={() => editor.settings.pixelate, (value) => editor.update('pixelate', value)}
+    />
+    {@render range('pixelSize', !editor.settings.pixelate || !pixelGrid)}
+    <p class="hint">
+      {!pixelGrid
+        ? 'Размер ячейки задаётся в разделе «Символы». Пикселизация фона здесь не применяется.'
+        : 'Размер пикселя меняет цветные блоки фона. ASCII имеет отдельную сетку.'}
+    </p>
+  </div>
+{/snippet}
+
+{#snippet color()}
+  <div class="control-stack">
+    <Checkbox
+      id="paletteEnabled"
+      size="s"
+      label="Ограничить палитру"
+      bind:checked={
+        () => editor.settings.paletteEnabled, (value) => editor.update('paletteEnabled', value)
+      }
+    />
+    {@render select(
+      'palette',
+      'Палитра',
+      editor.palettes.map((p) => ({ value: p.id, label: p.name })),
+    )}
+    <div id="swatches" class="swatches" aria-label={`Цвета палитры ${palette.name}`}>
+      {#each palette.colors as color, i (`${i}-${color}`)}<span
+          style:--swatch={`#${color}`}
+          title={`#${color}`}>█</span
+        >{/each}
+    </div>
+    <p class="hint">
+      {palette.colors.length} цветов · {palette.author}
+      {#if palette.url}<Link href={palette.url} target="_blank" rel="noopener noreferrer"
+          >Lospec ↗</Link
+        >{/if}
+    </p>
+    <form
+      class="import-form"
+      onsubmit={(event) => {
+        event.preventDefault();
+        void editor.importPalette(paletteUrl);
+      }}
+    >
+      <Field id="paletteUrl" label="Ссылка или имя палитры Lospec">
+        {#snippet children(control)}<Input
             {...control}
             size="s"
-            options={[600, 900, 1200, 1600].map((value) => ({
-              value: String(value),
-              label: `${value} px`,
-            }))}
-            bind:value={
-              () => String(editor.settings.resolution),
-              (value) => {
-                if (value) editor.update('resolution', Number(value));
-              }
-            }
-          />
-        {/snippet}
+            bind:value={paletteUrl}
+            placeholder="Lospec: ссылка или sweetie-16"
+          />{/snippet}
       </Field>
-      <Checkbox
-        id="correction"
-        size="s"
-        label="Коррекция изображения"
-        bind:checked={
-          () => editor.settings.correction, (value) => editor.update('correction', value)
-        }
-      />
-      {@render range('brightness', !editor.settings.correction)}
-      {@render range('contrast', !editor.settings.correction)}
-      {@render range('saturation', !editor.settings.correction)}
-      <Checkbox
-        id="pixelate"
-        size="s"
-        label="Пикселизация фона / пиксельного режима"
-        disabled={editor.settings.mode === 'ascii'}
-        bind:checked={() => editor.settings.pixelate, (value) => editor.update('pixelate', value)}
-      />
-      {@render range('pixelSize', !editor.settings.pixelate || editor.settings.mode === 'ascii')}
-      <p class="hint">
-        {editor.settings.mode === 'ascii'
-          ? 'В ASCII размер ячейки задаётся размером символа и интервалами ниже. Пикселизация здесь не применяется.'
-          : 'Размер пикселя меняет цветные блоки фона. ASCII имеет отдельную сетку.'}
-      </p>
-    </div>
-  </Panel>
-{/if}
-
-{#if section === 'all' || section === 'color'}
-  <Panel title="03 / Цвет и дизеринг" size="s">
-    <div class="control-stack">
-      <Checkbox
-        id="paletteEnabled"
-        size="s"
-        label="Ограничить палитру"
-        bind:checked={
-          () => editor.settings.paletteEnabled, (value) => editor.update('paletteEnabled', value)
-        }
-      />
-      {@render select(
-        'palette',
-        'Палитра',
-        editor.palettes.map((p) => ({ value: p.id, label: p.name })),
-      )}
-      <div id="swatches" class="swatches" aria-label={`Цвета палитры ${palette.name}`}>
-        {#each palette.colors as color, i (`${i}-${color}`)}<span
-            style:--swatch={`#${color}`}
-            title={`#${color}`}>█</span
-          >{/each}
-      </div>
-      <p class="hint">
-        {palette.colors.length} цветов · {palette.author}
-        {#if palette.url}<Link href={palette.url} target="_blank" rel="noopener noreferrer"
-            >Lospec ↗</Link
-          >{/if}
-      </p>
-      <form
-        class="import-form"
-        onsubmit={(event) => {
-          event.preventDefault();
-          void editor.importPalette(paletteUrl);
-        }}
+      <Button id="import" type="submit" size="s" loading={editor.importing}
+        >Импортировать палитру</Button
       >
-        <Field id="paletteUrl" label="Ссылка или имя палитры Lospec">
-          {#snippet children(control)}<Input
-              {...control}
-              size="s"
-              bind:value={paletteUrl}
-              placeholder="Lospec: ссылка или sweetie-16"
-            />{/snippet}
-        </Field>
-        <Button id="import" type="submit" size="s" loading={editor.importing}
-          >Импортировать палитру</Button
-        >
-      </form>
-      <p id="importStatus" class="hint" role="status">{editor.importStatus}</p>
-      {@render select(
-        'dither',
-        'Дизеринг',
-        [
-          { value: 'none', label: 'Выключен' },
-          { value: 'bayer', label: 'Bayer · регулярный 4×4' },
-          { value: 'floyd', label: 'Floyd–Steinberg · зерно' },
-          { value: 'atkinson', label: 'Atkinson · разреженный' },
-        ],
-        !editor.settings.paletteEnabled,
-      )}
-      {@render range(
-        'strength',
-        !editor.settings.paletteEnabled || editor.settings.dither === 'none',
-      )}
-    </div>
-  </Panel>
-{/if}
+    </form>
+    <p id="importStatus" class="hint" role="status">{editor.importStatus}</p>
+    {@render select(
+      'dither',
+      'Дизеринг',
+      [
+        { value: 'none', label: 'Выключен' },
+        { value: 'bayer', label: 'Bayer · регулярный 4×4' },
+        { value: 'floyd', label: 'Floyd–Steinberg · зерно' },
+        { value: 'atkinson', label: 'Atkinson · разреженный' },
+      ],
+      !editor.settings.paletteEnabled,
+    )}
+    {@render range(
+      'strength',
+      !editor.settings.paletteEnabled || editor.settings.dither === 'none',
+    )}
+  </div>
+{/snippet}
 
-{#if section === 'all' || section === 'ascii'}
-  <Panel title="04 / Символы" size="s">
-    <div class="control-stack">
+{#snippet ascii()}
+  <div class="control-stack">
+    {#if twoColor}
+      <p class="hint">
+        {editor.settings.mode === 'ascii-fx'
+          ? 'ASCII FX подбирает форму символа и два цвета на ячейку. Палитра применяется после подбора; на малом числе цветов часть деталей может пропасть.'
+          : 'png2xp подбирает полублоки и штриховку с двумя цветами из палитры. Это адаптация алгоритма Asciicker для фотографий.'}
+      </p>
+      {@render range('cellSize')}{@render range('cellAspect')}
+      <p class="hint">1 — квадратные ячейки, 2 — вытянутые по вертикали.</p>
+    {:else}
       <p class="hint">Настройки применяются в режимах ASCII и «Фон + ASCII».</p>
-      {@render select('matching', 'Подбор', [
-        { value: 'tone', label: 'По яркости' },
-        { value: 'shape', label: 'По яркости и форме' },
-      ])}
-      {@render range('shapeWeight', editor.settings.matching !== 'shape')}
+    {/if}
+    {#if editor.settings.mode === 'png2xp'}
+      <Checkbox
+        id="blockShading"
+        size="s"
+        label="Штриховка ░ ▒"
+        bind:checked={
+          () => editor.settings.blockShading, (value) => editor.update('blockShading', value)
+        }
+      />
+      <p class="hint">
+        Без штриховки остаются сплошные ячейки и полублоки ▄ ▌. Шрифт и библиотека букв в этом
+        режиме не используются.
+      </p>
+    {:else}
+      {#if !twoColor}
+        {@render select('matching', 'Подбор', [
+          { value: 'tone', label: 'По яркости' },
+          { value: 'shape', label: 'По яркости и форме' },
+        ])}
+        {@render range('shapeWeight', editor.settings.matching !== 'shape')}
+      {/if}
       {@render select('font', 'Шрифт', [
         { value: 'Consolas, monospace', label: 'Consolas' },
         { value: "'Courier New', monospace", label: 'Courier New' },
         { value: "'Lucida Console', monospace", label: 'Lucida Console' },
       ])}
-      {@render range('fontSize')}{@render range('gapX')}{@render range('gapY')}
+      {#if !twoColor}{@render range('fontSize')}{/if}
+      {@render range('gapX')}{@render range('gapY')}
       <span>Добавить набор</span>
       <div class="button-grid">
         {#each Object.entries(characterSets) as [name, chars] (name)}
@@ -265,20 +296,54 @@
           >Базовый набор</Button
         >
       </div>
-      {@render select('background', 'Однотонный фон', [
-        { value: '#0c061b', label: 'Чернильный' },
-        { value: '#000000', label: 'Чёрный' },
-        { value: '#ffffff', label: 'Белый' },
-        { value: '#eee9de', label: 'Бумага' },
-      ])}
-      {@render range('blur', editor.settings.mode !== 'overlay')}
-      {@render range('backgroundOpacity', editor.settings.mode !== 'overlay')}
-      {@render range('opacity')}
-    </div>
+    {/if}
+    {@render select('background', 'Однотонный фон', [
+      { value: '#0c061b', label: 'Чернильный' },
+      { value: '#000000', label: 'Чёрный' },
+      { value: '#ffffff', label: 'Белый' },
+      { value: '#eee9de', label: 'Бумага' },
+    ])}
+    {#if !twoColor}{@render range('blur', editor.settings.mode !== 'overlay')}{/if}
+    {@render range('backgroundOpacity', editor.settings.mode !== 'overlay' && !twoColor)}
+    {@render range('opacity')}
+  </div>
+{/snippet}
+
+{#snippet content(id: string)}
+  {#if id === 'photo'}
+    {@render photo()}
+  {:else if id === 'tone'}
+    {@render tone()}
+  {:else if id === 'color'}
+    {@render color()}
+  {:else if id === 'ascii'}
+    {@render ascii()}
+  {/if}
+{/snippet}
+
+{#if section === 'all'}
+  {#each groups as group (group.id)}
+    <Panel size="s">
+      <Accordion items={[group]} multiple bind:value={expanded} size="s" headingLevel={2}>
+        {#snippet header(item)}<strong>{item.title}</strong>{/snippet}
+        {#snippet children(item)}
+          <div class="section-content">{@render content(item.id)}</div>
+        {/snippet}
+      </Accordion>
+    </Panel>
+  {/each}
+{:else}
+  <Panel title={groups.find((group) => group.id === section)!.title} size="s">
+    {@render content(section)}
   </Panel>
 {/if}
 
 <style>
+  .section-content {
+    border-top: 1px dashed var(--muted);
+    padding-top: 16px;
+    margin-top: 12px;
+  }
   .control-stack,
   .import-form {
     display: grid;
