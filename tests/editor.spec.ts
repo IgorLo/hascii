@@ -36,6 +36,21 @@ async function uploadWithoutMime(page: Page, name: string, buffer: Buffer) {
   );
 }
 
+// Inspect actual scroll owners, including a wrapper that accidentally starts scrolling.
+async function expectThemedScrollbars(page: Page) {
+  const unthemed = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('*'))
+      .filter((el) => {
+        const { overflowY } = getComputedStyle(el);
+        const scrolls = el === document.scrollingElement || ['auto', 'scroll'].includes(overflowY);
+        return scrolls && el.clientHeight > 0 && el.scrollHeight > el.clientHeight + 1;
+      })
+      .filter((el) => getComputedStyle(el, '::-webkit-scrollbar').width !== '6px')
+      .map((el) => el.tagName + '#' + el.id),
+  );
+  expect(unthemed).toEqual([]);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#export')).toBeEnabled({ timeout: 20000 });
@@ -111,6 +126,7 @@ test('desktop settings scroll with the themed six-pixel gutter', async ({ page }
   const sidebar = page.getByRole('complementary', { name: 'Настройки изображения' });
   const width = await sidebar.evaluate((el) => getComputedStyle(el, '::-webkit-scrollbar').width);
   expect(width).toBe('6px');
+  await expectThemedScrollbars(page);
   await sidebar.hover();
   await page.mouse.wheel(0, 200);
   await expect.poll(() => sidebar.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
@@ -324,6 +340,7 @@ test('mobile preview, tools and focus fit narrow screens', async ({ page }) => {
     await preview(page, 'result');
     await expect(page.locator('#result')).toBeInViewport();
     await expect(page.locator('#original')).toBeHidden();
+    await expectThemedScrollbars(page);
     for (const section of ['photo', 'tone', 'color', 'ascii']) {
       await tools(page, section);
       await expect(page.getByRole('dialog')).toBeVisible();
@@ -342,6 +359,7 @@ test('mobile preview, tools and focus fit narrow screens', async ({ page }) => {
           .map((element) => element.tagName + '#' + element.id);
       });
       expect(overflow).toEqual([]);
+      await expectThemedScrollbars(page);
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).not.toBeVisible();
       await expect(page.locator(`[data-tool="${section}"]`)).toBeFocused();

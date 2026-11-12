@@ -10,6 +10,7 @@
 </script>
 
 <Theme
+  class="editor-viewport aui-scrollbar"
   palette="plum"
   size="s"
   colors={{

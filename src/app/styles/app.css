@@ -7,7 +7,11 @@ html {
 body {
   margin: 0;
 }
-html:has([data-mobile-settings][open]) {
+.editor-viewport {
+  height: 100dvh;
+  overflow: auto;
+}
+.editor-viewport:has([data-mobile-settings][open]) {
   overflow: hidden;
 }
 * {
