@@ -41,6 +41,37 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#export')).toBeEnabled({ timeout: 20000 });
 });
 
+test('cell-fill overlay keeps ASCII unchanged at zero and locks the pixel grid', async ({
+  page,
+}) => {
+  await page.locator('[data-mode="ascii"]').click();
+  await expect(page.locator('#export')).toBeEnabled();
+  const original = await page
+    .locator('#result')
+    .evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+  await page.locator('[data-mode="overlay"]').click();
+  await tools(page, 'tone');
+  await expect(page.locator('#pixelSize')).toBeDisabled();
+  await expect(page.locator('#pixelate')).toBeDisabled();
+  await tools(page, 'ascii');
+  await expect(page.locator('#blur')).toBeDisabled();
+  await page.locator('#overlayFill').fill('0');
+  await closeTools(page);
+  await expect(page.locator('#export')).toBeEnabled();
+  expect(
+    (await page.locator('#result').evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())) ===
+      original,
+  ).toBe(true);
+  await tools(page, 'ascii');
+  await page.locator('#overlayFill').fill('0.35');
+  await closeTools(page);
+  await expect(page.locator('#export')).toBeEnabled();
+  expect(
+    (await page.locator('#result').evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())) ===
+      original,
+  ).toBe(false);
+});
+
 test('PICO-8 two-color modes expose their controls and export real PNGs', async ({ page }) => {
   await tools(page, 'color');
   await page.locator('#palette').selectOption('pico-8');
@@ -143,8 +174,10 @@ test('settings, empty-alphabet recovery and persistence', async ({ page }) => {
   await closeTools(page);
   await expect(page.locator('#outputInfo')).toHaveText('480 × 600');
   await page.locator('[data-mode="overlay"]').click();
+  await tools(page, 'tone');
+  await expect(page.locator('#pixelSize')).toBeDisabled();
   await tools(page, 'ascii');
-  await page.locator('#backgroundOpacity').fill('0');
+  await page.locator('#overlayFill').fill('0');
   await page.locator('#opacity').fill('1');
   await expect(page.locator('#export')).toBeEnabled();
   await page.reload();

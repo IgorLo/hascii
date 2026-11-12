@@ -32,6 +32,7 @@ export interface Settings {
   background: string;
   blur: number;
   backgroundOpacity: number;
+  overlayFill: number;
   opacity: number;
   allowEmpty: boolean;
   emptyThreshold: number;

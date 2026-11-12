@@ -117,7 +117,7 @@ export function render(job: Job): Result {
   let columns = 0,
     rows = 0,
     glyphCount = 0;
-  if (s.mode === 'pixels' || s.mode === 'overlay') {
+  if (s.mode === 'pixels') {
     const size = s.pixelate ? s.pixelSize : 1,
       g = grid(size, size);
     columns = g.cols;
@@ -130,8 +130,8 @@ export function render(job: Job): Result {
     output.ctx.fillStyle = s.background;
     output.ctx.fillRect(0, 0, w, h);
     output.ctx.save();
-    output.ctx.globalAlpha = s.mode === 'overlay' ? s.backgroundOpacity : 1;
-    output.ctx.filter = s.mode === 'overlay' ? `blur(${s.blur}px)` : 'none';
+    output.ctx.globalAlpha = 1;
+    output.ctx.filter = 'none';
     output.ctx.drawImage(bg.canvas, 0, 0);
     output.ctx.restore();
   } else {
@@ -147,11 +147,24 @@ export function render(job: Job): Result {
     rows = g.rows;
     glyphCount = glyphs.length;
     if (!glyphs.length) throw Error('Добавьте хотя бы один символ.');
+    // Experimental cell tint: use the exact ASCII color grid, including its gaps.
+    // At zero opacity the entire result is identical to ordinary ASCII.
+    if (s.mode === 'overlay' && s.overlayFill > 0) {
+      output.ctx.save();
+      output.ctx.globalAlpha = s.overlayFill;
+      for (let y = 0; y < g.rows; y++)
+        for (let x = 0; x < g.cols; x++) {
+          const i = (y * g.cols + x) * 4;
+          output.ctx.fillStyle = `rgb(${g.colors[i]},${g.colors[i + 1]},${g.colors[i + 2]})`;
+          output.ctx.fillRect(x * cw, y * ch, cw, ch);
+        }
+      output.ctx.restore();
+    }
     const maxMean = Math.max(...glyphs.map((a) => a.mean)) || 1,
       minMean = Math.min(...glyphs.map((a) => a.mean));
     const features = new Float32Array(48);
     const bg = Number.parseInt(s.background.slice(1), 16),
-      bgLuma = s.mode === 'overlay' ? 0 : luma(bg >> 16, (bg >> 8) & 255, bg & 255);
+      bgLuma = luma(bg >> 16, (bg >> 8) & 255, bg & 255);
     output.ctx.font = `${s.fontSize}px ${s.font}`;
     output.ctx.textAlign = 'center';
     output.ctx.textBaseline = 'middle';
@@ -186,9 +199,6 @@ export function render(job: Job): Result {
             s.emptyThreshold > 0 &&
             norm / Math.sqrt(48) <= s.emptyThreshold / 255
           ) {
-            // Overlay already has a color layer. Keep its blur/opacity instead of
-            // painting an opaque cell on top and defeating the background controls.
-            if (s.mode === 'overlay') continue;
             output.ctx.save();
             output.ctx.globalAlpha = 1;
             output.ctx.fillStyle = `rgb(${c.join(',')})`;

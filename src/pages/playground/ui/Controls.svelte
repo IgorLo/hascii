@@ -25,7 +25,7 @@
   const palette = $derived(editor.palettes.find((p) => p.id === editor.settings.palette)!);
   const charCount = $derived(new Set(Array.from(editor.settings.chars)).size);
   const twoColor = $derived(['ascii-fx', 'png2xp'].includes(editor.settings.mode));
-  const pixelGrid = $derived(['pixels', 'overlay'].includes(editor.settings.mode));
+  const pixelGrid = $derived(editor.settings.mode === 'pixels');
   const groups = [
     { id: 'photo', title: '01 / Отправная точка' },
     { id: 'tone', title: '02 / Холст и тон' },
@@ -128,15 +128,17 @@
     <Checkbox
       id="pixelate"
       size="s"
-      label="Пикселизация фона / пиксельного режима"
+      label="Пикселизация"
       disabled={!pixelGrid}
       bind:checked={() => editor.settings.pixelate, (value) => editor.update('pixelate', value)}
     />
     {@render range('pixelSize', !editor.settings.pixelate || !pixelGrid)}
     <p class="hint">
-      {!pixelGrid
-        ? 'Размер ячейки задаётся в разделе «Символы». Пикселизация фона здесь не применяется.'
-        : 'Размер пикселя меняет цветные блоки фона. ASCII имеет отдельную сетку.'}
+      {editor.settings.mode === 'overlay'
+        ? 'Фон повторяет сетку ASCII. Размер символа и интервалы управляют всей ячейкой; отдельного размера пикселя здесь нет.'
+        : !pixelGrid
+          ? 'Размер ячейки задаётся в разделе «Символы». Пикселизация фона здесь не применяется.'
+          : 'Размер пикселя меняет цветные блоки фона. ASCII имеет отдельную сетку.'}
     </p>
   </div>
 {/snippet}
@@ -217,7 +219,11 @@
       {@render range('cellSize')}{@render range('cellAspect')}
       <p class="hint">1 — квадратные ячейки, 2 — вытянутые по вертикали.</p>
     {:else}
-      <p class="hint">Настройки применяются в режимах ASCII и «Фон + ASCII».</p>
+      <p class="hint">
+        {editor.settings.mode === 'overlay'
+          ? 'Эксперимент: тот же ASCII, но ячейки залиты цветом своих символов. Приглушённая заливка заполняет промежутки, а символы остаются поверх.'
+          : 'Настройки применяются в режимах ASCII и «Фон + ASCII».'}
+      </p>
     {/if}
     {#if editor.settings.mode === 'png2xp'}
       <Checkbox
@@ -303,8 +309,16 @@
       { value: '#ffffff', label: 'Белый' },
       { value: '#eee9de', label: 'Бумага' },
     ])}
-    {#if !twoColor}{@render range('blur', editor.settings.mode !== 'overlay')}{/if}
-    {@render range('backgroundOpacity', editor.settings.mode !== 'overlay' && !twoColor)}
+    {#if !twoColor}{@render range('blur', true)}{/if}
+    {#if editor.settings.mode === 'overlay'}
+      {@render range('overlayFill')}
+      <p class="hint">
+        0 — исходный ASCII, 30% — лёгкая цветная подложка. При 100% цвет заливки совпадает с
+        символом, и он сливается с фоном. Ровные участки сохраняются как в обычном ASCII.
+      </p>
+    {:else}
+      {@render range('backgroundOpacity', !twoColor)}
+    {/if}
     {@render range('opacity')}
   </div>
 {/snippet}

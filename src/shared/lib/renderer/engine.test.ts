@@ -35,6 +35,7 @@ const settings: Settings = {
   background: '#000000',
   blur: 0,
   backgroundOpacity: 1,
+  overlayFill: 0.3,
   opacity: 1,
   allowEmpty: true,
   emptyThreshold: 1,
@@ -56,6 +57,60 @@ function run(overrides: Partial<Settings> = {}, value = 255) {
   });
 }
 describe('renderer regressions', () => {
+  it.each(['#000000', '#eee9de'])(
+    'zero cell fill is exactly the same ASCII on %s',
+    (background) => {
+      const source = uniform(188);
+      for (let i = 0; i < source.data.length; i += 4) source.data[i] = i % 256;
+      const job = {
+        id: 1,
+        image: source,
+        settings: { ...settings, background, overlayFill: 0 },
+        palette: [
+          [32, 32, 32],
+          [240, 240, 240],
+        ] as [number, number, number][],
+      };
+      const ascii = render(job);
+      const overlay = render({
+        ...job,
+        settings: { ...job.settings, mode: 'overlay', pixelSize: 19, pixelate: false, blur: 9 },
+      });
+      expect(overlay.image!.data.every((v, i) => v === ascii.image!.data[i])).toBe(true);
+    },
+  );
+  it('cell fill covers the gaps and ignores independent pixel size', () => {
+    const image = run(
+      {
+        mode: 'overlay',
+        overlayFill: 0.3,
+        opacity: 0,
+        allowEmpty: false,
+        chars: '+',
+        gapX: 3,
+        gapY: 4,
+      },
+      192,
+    ).image!;
+    expect([...image.data].filter((_, i) => i % 4 !== 3).every((v) => Math.abs(v - 58) <= 1)).toBe(
+      true,
+    );
+    const first = run({
+      mode: 'overlay',
+      overlayFill: 0.3,
+      pixelSize: 1,
+      allowEmpty: false,
+    }).image!;
+    const second = run({
+      mode: 'overlay',
+      overlayFill: 0.3,
+      pixelSize: 23,
+      pixelate: false,
+      blur: 10,
+      allowEmpty: false,
+    }).image!;
+    expect(first.data).toEqual(second.data);
+  });
   it.each([
     [2, 1],
     [2, 1.5],
@@ -279,16 +334,15 @@ describe('renderer regressions', () => {
       expect([...result.data].filter((_, i) => i % 4 !== 3).every((v) => v === value)).toBe(true);
     }
   });
-  it.each([0, 0.5, 1])('background opacity %s affects flat overlay cells', (backgroundOpacity) => {
-    const image = run({ mode: 'overlay', backgroundOpacity, opacity: 0 }).image!;
-    expect(
-      [...image.data]
-        .filter((_, i) => i % 4 !== 3)
-        .every((v) => Math.abs(v - 255 * backgroundOpacity) <= 1),
-    ).toBe(true);
-  });
-  it('glyphs remain visible over a fully transparent pixel layer', () => {
-    const image = run({ mode: 'overlay', backgroundOpacity: 0, allowEmpty: false }).image!;
+  it.each([0, 0.5, 1])(
+    'flat overlay cells preserve the same color as ASCII at fill %s',
+    (overlayFill) => {
+      const image = run({ mode: 'overlay', overlayFill, opacity: 0 }).image!;
+      expect([...image.data].filter((_, i) => i % 4 !== 3).every((v) => v === 255)).toBe(true);
+    },
+  );
+  it('glyphs remain visible over a fully transparent cell fill', () => {
+    const image = run({ mode: 'overlay', overlayFill: 0, allowEmpty: false }).image!;
     expect([...image.data].some((v, i) => i % 4 === 0 && v > 0)).toBe(true);
   });
   it('pixel-only mode ignores background opacity', () => {

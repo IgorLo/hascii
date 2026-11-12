@@ -27,6 +27,7 @@ export const defaults: Settings = {
   background: '#0c061b',
   blur: 3,
   backgroundOpacity: 1,
+  overlayFill: 0.3,
   opacity: 1,
   allowEmpty: true,
   emptyThreshold: 6,
@@ -59,8 +60,7 @@ export function presetSettings(name: string, current: Settings): Settings {
     Object.assign(next, {
       mode: 'overlay',
       palette: 'dust',
-      pixelSize: 9,
-      blur: 4,
+      overlayFill: 0.3,
       fontSize: 15,
       matching: 'shape',
       shapeWeight: 0.55,
@@ -90,6 +90,7 @@ export const ranges: Record<
   gapY: { label: 'Интервал по вертикали', min: 0, max: 20, step: 1 },
   blur: { label: 'Размытие фона', min: 0, max: 12, step: 0.5 },
   backgroundOpacity: { label: 'Непрозрачность пиксельного фона', min: 0, max: 1, step: 0.05 },
+  overlayFill: { label: 'Непрозрачность заливки ячеек', min: 0, max: 1, step: 0.05 },
   opacity: { label: 'Непрозрачность символов', min: 0, max: 1, step: 0.05 },
   emptyThreshold: { label: 'Заливка однотонных участков', min: 0, max: 40, step: 1 },
 };
