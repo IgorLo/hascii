@@ -67,6 +67,7 @@
   <Field id={key} {label}>
     {#snippet children(control)}
       <Select
+        showPlaceholder={false}
         {...control}
         size="s"
         {options}
@@ -101,6 +102,7 @@
     >
       {#snippet children(control)}
         <Select
+          showPlaceholder={false}
           {...control}
           size="s"
           options={[600, 900, 1200, 1600].map((value) => ({
@@ -158,7 +160,7 @@
       'Палитра',
       editor.palettes.map((p) => ({ value: p.id, label: p.name })),
     )}
-    <div id="swatches" class="swatches" aria-label={`Цвета палитры ${palette.name}`}>
+    <div id="swatches" class="swatches aui-scrollbar" aria-label={`Цвета палитры ${palette.name}`}>
       {#each palette.colors as color, i (`${i}-${color}`)}<span
           style:--swatch={`#${color}`}
           title={`#${color}`}>█</span
@@ -166,8 +168,11 @@
     </div>
     <p class="hint">
       {palette.colors.length} цветов · {palette.author}
-      {#if palette.url}<Link href={palette.url} target="_blank" rel="noopener noreferrer"
-          >Lospec ↗</Link
+      {#if palette.url}<Link
+          size="inherit"
+          href={palette.url}
+          target="_blank"
+          rel="noopener noreferrer">Lospec ↗</Link
         >{/if}
     </p>
     <form
@@ -287,6 +292,7 @@
         hint="До 512 уникальных символов. Отображение Unicode зависит от шрифта; цветные emoji не рассчитаны на точное сопоставление."
       >
         {#snippet children(control)}<Textarea
+            class="aui-scrollbar"
             {...control}
             size="s"
             rows={4}

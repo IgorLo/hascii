@@ -23,7 +23,7 @@
   "dependencies": {
     "@ascii-fx/core": "0.9.1",
     "heic-to": "1.6.7",
-    "svelte-ascii-ui": "0.2.0"
+    "svelte-ascii-ui": "0.3.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",

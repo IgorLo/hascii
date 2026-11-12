@@ -79,11 +79,7 @@
 <header class="app-header">
   <h1 class="brand">
     <img class="brand-image" src={asset('/hascii-mark.png')} alt="" width="900" height="656" />
-    <Link
-      href={resolve('/')}
-      aria-label="HASCII — главная"
-      style="font-size: inherit; line-height: inherit">HASCII</Link
-    >
+    <Link href={resolve('/')} aria-label="HASCII — главная" size="inherit">HASCII</Link>
   </h1>
   <Button
     id="export"
@@ -97,7 +93,7 @@
 
 <main class="workspace">
   {#if !mobile.current}
-    <aside aria-label="Настройки изображения">
+    <aside class="aui-scrollbar" aria-label="Настройки изображения">
       <div class="intro">
         <p>Пиксели, символы и немного контролируемого шума.</p>
       </div>
@@ -109,7 +105,7 @@
     </aside>
   {/if}
 
-  <article class="preview-area" aria-label="Превью изображения">
+  <article class="preview-area aui-scrollbar" aria-label="Превью изображения">
     <div class="toolbar">
       <div class="button-row" role="group" aria-label="Режим отрисовки">
         {#each modes as mode (mode.value)}
@@ -127,6 +123,7 @@
     <div class="preview-toolbar">
       {#if mobile.current}
         <Select
+          showPlaceholder={false}
           size="s"
           aria-label="Расположение превью"
           options={views.map((item) => ({ value: item.value, label: item.label }))}
@@ -213,7 +210,7 @@
     closeLabel="Закрыть настройки"
     style="width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);"
   >
-    <div class="mobile-settings">
+    <div class="mobile-settings aui-scrollbar">
       {#if section === 'photo'}{@render upload()}{/if}
       <Controls {editor} {section} />
       {#if editor.error}<p class="error" role="alert">{editor.error}</p>{/if}
@@ -244,6 +241,10 @@
     border-top: 1px dashed var(--muted);
   }
   .mobile-settings {
+    height: 100%;
+    overflow: auto;
+    align-content: start;
+    overscroll-behavior: contain;
     min-width: 0;
     display: grid;
     gap: 16px;
