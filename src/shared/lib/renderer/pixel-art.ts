@@ -3,7 +3,7 @@
  * No canvas, Svelte state, network access, or original prototype code is used here.
  */
 type Lab = [number, number, number];
-type Options = { columns: number; colorCount: number; iterations: number };
+export type PixelArtOptions = { columns: number; colorCount: number; iterations: number };
 
 const MAX_CELLS = 16384;
 const MAX_SAMPLES = 65536;
@@ -137,7 +137,7 @@ function associate(means: Float64Array, palette: Lab[], assignments: Uint8Array)
 
 export function renderPixelArt(
   source: ImageData,
-  options: Options,
+  options: PixelArtOptions,
 ): { image: ImageData; columns: number; rows: number; glyphs: number } {
   const { width, height } = source;
   let columns = Math.min(width, control(options.columns, 64, 8, 128));

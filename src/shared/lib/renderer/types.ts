@@ -7,7 +7,7 @@ export interface Palette {
   url?: string;
 }
 export interface Settings {
-  mode: 'pixels' | 'ascii' | 'overlay' | 'ascii-fx' | 'png2xp' | 'halftone' | 'pixel-art';
+  mode: RenderMode;
   halftoneSize: number;
   halftoneAngle: number;
   halftoneShape: 'round' | 'diamond' | 'line';
@@ -66,3 +66,4 @@ export interface Result {
   rows: number;
   glyphs: number;
 }
+import type { RenderMode } from './modes';

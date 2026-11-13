@@ -4,17 +4,10 @@
 
   import type { Settings } from '@/shared/lib/renderer';
 
+  import { modeChoices as modes } from '../model/mode-presentation';
+
   let { value, onchange }: { value: Settings['mode']; onchange: (mode: Settings['mode']) => void } =
     $props();
-  const modes: { value: Settings['mode']; label: string }[] = [
-    { value: 'pixel-art', label: 'Pixel Art' },
-    { value: 'pixels', label: 'Пиксели' },
-    { value: 'halftone', label: 'Halftone' },
-    { value: 'overlay', label: 'Фон + ASCII' },
-    { value: 'ascii', label: 'ASCII' },
-    { value: 'ascii-fx', label: 'ASCII FX' },
-    { value: 'png2xp', label: 'png2xp' },
-  ];
   let viewport = $state<HTMLDivElement>();
   let canBack = $state(false);
   let canForward = $state(false);

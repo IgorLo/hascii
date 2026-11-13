@@ -1,10 +1,11 @@
 import { surface } from './canvas';
 import { clamp, luma, quantize } from './color';
 import { renderHalftone } from './halftone';
+import { type AsciiOptions, selectMode } from './modes';
 import { renderPixelArt } from './pixel-art';
 import { renderPng2xp } from './png2xp';
 import { renderAsciiFx } from './two-color';
-import type { Job, Result, RGB, Settings } from './types.js';
+import type { Job, Result, RGB } from './types.js';
 export { nearest, quantize } from './color';
 function rgbAt(data: Uint8ClampedArray, w: number, h: number, x: number, y: number): RGB {
   const i =
@@ -20,7 +21,7 @@ interface Glyph {
 }
 let atlasKey = '';
 let atlas: Glyph[] = [];
-function glyphAtlas(s: Settings, cw: number, ch: number): Glyph[] {
+function glyphAtlas(s: AsciiOptions, cw: number, ch: number): Glyph[] {
   const key = JSON.stringify([s.font, s.fontSize, s.chars, s.allowEmpty, cw, ch]);
   if (key === atlasKey) return atlas;
   const a = surface(cw, ch),
@@ -79,54 +80,37 @@ export function render(job: Job): Result {
     corrected[i + 2] = clamp(b);
     corrected[i + 3] = 255;
   }
-  if (s.mode === 'ascii-fx')
+  const mode = selectMode(s);
+  const palette = mode.paletteEnabled ? job.palette : [];
+  if (mode.id === 'ascii-fx')
     return {
       id: job.id,
-      ...renderAsciiFx(new ImageData(corrected, w, h), s, s.paletteEnabled ? job.palette : []),
+      ...renderAsciiFx(new ImageData(corrected, w, h), mode.options, palette),
       ms: performance.now() - start,
     };
-  if (s.mode === 'png2xp')
+  if (mode.id === 'png2xp')
     return {
       id: job.id,
-      ...renderPng2xp(new ImageData(corrected, w, h), s, s.paletteEnabled ? job.palette : []),
+      ...renderPng2xp(new ImageData(corrected, w, h), mode.options, palette),
       ms: performance.now() - start,
     };
-  if (s.mode === 'halftone') {
-    const color = (hex: string): RGB => {
-      const value = Number.parseInt(hex.slice(1), 16);
-      return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
-    };
+  if (mode.id === 'halftone') {
     return {
       id: job.id,
-      ...renderHalftone(new ImageData(corrected, w, h), {
-        size: s.halftoneSize,
-        angle: s.halftoneAngle,
-        shape: s.halftoneShape,
-        colorMode: s.halftoneColor,
-        ink: color(s.halftoneInk),
-        paper: color(s.halftonePaper),
-        inkB: color(s.halftoneInkB),
-        angleB: s.halftoneAngleB,
-        balance: s.halftoneBalance,
-        offsetX: s.halftoneOffsetX,
-        offsetY: s.halftoneOffsetY,
-      }),
+      ...renderHalftone(new ImageData(corrected, w, h), mode.options),
       ms: performance.now() - start,
     };
   }
-  if (s.mode === 'pixel-art')
+  if (mode.id === 'pixel-art')
     return {
       id: job.id,
-      ...renderPixelArt(new ImageData(corrected, w, h), {
-        columns: s.artColumns,
-        colorCount: s.artColors,
-        iterations: s.artIterations,
-      }),
+      ...renderPixelArt(new ImageData(corrected, w, h), mode.options),
       ms: performance.now() - start,
     };
   const original = surface(w, h);
   original.ctx.putImageData(new ImageData(corrected, w, h), 0, 0);
-  const p = s.paletteEnabled ? job.palette : [];
+  const p = palette;
+  const options = mode.options;
   function grid(cw: number, ch: number) {
     const cols = Math.ceil(w / cw),
       rows = Math.ceil(h / ch),
@@ -145,15 +129,15 @@ export function render(job: Job): Result {
       cols,
       rows,
       values,
-      colors: quantize(values, cols, rows, p, p.length ? s.dither : 'none', s.strength),
+      colors: quantize(values, cols, rows, p, p.length ? options.dither : 'none', options.strength),
     };
   }
   const output = surface(w, h);
   let columns = 0,
     rows = 0,
     glyphCount = 0;
-  if (s.mode === 'pixels') {
-    const size = s.pixelate ? s.pixelSize : 1,
+  if (mode.kind === 'pixels') {
+    const size = mode.options.pixelate ? mode.options.pixelSize : 1,
       g = grid(size, size);
     columns = g.cols;
     rows = g.rows;
@@ -162,7 +146,7 @@ export function render(job: Job): Result {
     const bg = surface(w, h);
     bg.ctx.imageSmoothingEnabled = false;
     bg.ctx.drawImage(low.canvas, 0, 0, g.cols * size, g.rows * size);
-    output.ctx.fillStyle = s.background;
+    output.ctx.fillStyle = options.background;
     output.ctx.fillRect(0, 0, w, h);
     output.ctx.save();
     output.ctx.globalAlpha = 1;
@@ -170,23 +154,24 @@ export function render(job: Job): Result {
     output.ctx.drawImage(bg.canvas, 0, 0);
     output.ctx.restore();
   } else {
-    output.ctx.fillStyle = s.background;
+    output.ctx.fillStyle = options.background;
     output.ctx.fillRect(0, 0, w, h);
   }
-  if (s.mode !== 'pixels') {
-    const cw = Math.max(2, Math.round(s.fontSize * 0.62 + s.gapX)),
-      ch = Math.max(2, Math.round(s.fontSize + s.gapY));
+  if (mode.kind === 'ascii') {
+    const ascii = mode.options;
+    const cw = Math.max(2, Math.round(ascii.fontSize * 0.62 + ascii.gapX)),
+      ch = Math.max(2, Math.round(ascii.fontSize + ascii.gapY));
     const g = grid(cw, ch),
-      glyphs = glyphAtlas(s, cw, ch);
+      glyphs = glyphAtlas(ascii, cw, ch);
     columns = g.cols;
     rows = g.rows;
     glyphCount = glyphs.length;
     if (!glyphs.length) throw Error('Добавьте хотя бы один символ.');
     // Experimental cell tint: use the exact ASCII color grid, including its gaps.
     // At zero opacity the entire result is identical to ordinary ASCII.
-    if (s.mode === 'overlay' && s.overlayFill > 0) {
+    if (ascii.overlayFill > 0) {
       output.ctx.save();
-      output.ctx.globalAlpha = s.overlayFill;
+      output.ctx.globalAlpha = ascii.overlayFill;
       for (let y = 0; y < g.rows; y++)
         for (let x = 0; x < g.cols; x++) {
           const i = (y * g.cols + x) * 4;
@@ -198,12 +183,12 @@ export function render(job: Job): Result {
     const maxMean = Math.max(...glyphs.map((a) => a.mean)) || 1,
       minMean = Math.min(...glyphs.map((a) => a.mean));
     const features = new Float32Array(48);
-    const bg = Number.parseInt(s.background.slice(1), 16),
+    const bg = Number.parseInt(ascii.background.slice(1), 16),
       bgLuma = luma(bg >> 16, (bg >> 8) & 255, bg & 255);
-    output.ctx.font = `${s.fontSize}px ${s.font}`;
+    output.ctx.font = `${ascii.fontSize}px ${ascii.font}`;
     output.ctx.textAlign = 'center';
     output.ctx.textBaseline = 'middle';
-    output.ctx.globalAlpha = s.opacity;
+    output.ctx.globalAlpha = ascii.opacity;
     for (let y = 0; y < g.rows; y++)
       for (let x = 0; x < g.cols; x++) {
         const cell = y * g.cols + x,
@@ -212,7 +197,7 @@ export function render(job: Job): Result {
         const tone = bgLuma > 0.5 ? 1 - raw : raw;
         let mean = 0,
           norm = 1;
-        if (s.matching === 'shape' || s.allowEmpty) {
+        if (ascii.matching === 'shape' || ascii.allowEmpty) {
           for (let sy = 0; sy < 8; sy++)
             for (let sx = 0; sx < 6; sx++) {
               const v = rgbAt(
@@ -230,9 +215,9 @@ export function render(job: Job): Result {
           // Flat regions keep their quantized color instead of exposing the background.
           // Symbol opacity only applies to glyphs, not these solid color cells.
           if (
-            s.allowEmpty &&
-            s.emptyThreshold > 0 &&
-            norm / Math.sqrt(48) <= s.emptyThreshold / 255
+            ascii.allowEmpty &&
+            ascii.emptyThreshold > 0 &&
+            norm / Math.sqrt(48) <= ascii.emptyThreshold / 255
           ) {
             output.ctx.save();
             output.ctx.globalAlpha = 1;
@@ -249,12 +234,12 @@ export function render(job: Job): Result {
           const density = (glyph.mean - minMean) / (maxMean - minMean || 1);
           const toneError = (density - tone) ** 2;
           let shapeError = 0;
-          if (s.matching === 'shape' && norm > 0.08) {
+          if (ascii.matching === 'shape' && norm > 0.08) {
             let dot = 0;
             for (let i = 0; i < 48; i++) dot += features[i] * glyph.features[i];
             shapeError = 1 - dot;
           }
-          const mix = s.matching === 'shape' && norm > 0.08 ? s.shapeWeight : 0;
+          const mix = ascii.matching === 'shape' && norm > 0.08 ? ascii.shapeWeight : 0;
           const error = (1 - mix) * toneError + mix * shapeError;
           if (error < score) {
             best = glyph;

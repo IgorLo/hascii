@@ -1,9 +1,10 @@
 import { SvelteSet } from 'svelte/reactivity';
 
 import { builtInPalettes, parsePaletteSlug, validPalette } from '@/shared/lib/palettes';
-import type { Palette, Result, Settings } from '@/shared/lib/renderer';
+import { type Palette, type Result, selectMode, type Settings } from '@/shared/lib/renderer';
 
 import { decodePhoto } from './image-import';
+import { formatRecipe } from './mode-presentation';
 import { RenderController } from './render-controller';
 import { defaults, presetSettings } from './settings';
 
@@ -85,17 +86,11 @@ export class EditorModel {
     this.outputInfo = `${result.image.width} × ${result.image.height}`;
     this.status = `Готово · ${Math.round(result.ms)} мс`;
     this.canExport = true;
-    const palette = this.palettes.find((p) => p.id === this.settings.palette)!;
-    if (this.settings.mode === 'halftone') {
-      const colors = { mono: 'одна краска', cmyk: 'CMYK', duotone: 'две краски' };
-      this.recipe = `Halftone · ${this.settings.halftoneSize} px · ${this.settings.halftoneAngle}° · ${colors[this.settings.halftoneColor]}`;
-      return;
-    }
-    if (this.settings.mode === 'pixel-art') {
-      this.recipe = `Pixel Art · ${result.columns} × ${result.rows} пикселей · до ${this.settings.artColors} цветов · автоматическая палитра`;
-      return;
-    }
-    this.recipe = `${result.columns} × ${result.rows} ячеек · ${this.settings.paletteEnabled ? palette.name : 'исходные цвета'} · ${this.settings.paletteEnabled ? this.settings.dither : 'без дизеринга'}${result.glyphs ? ' · ' + result.glyphs + ' символов' : ''}`;
+    const mode = selectMode(this.settings);
+    const paletteName = mode.paletteEnabled
+      ? this.palettes.find((p) => p.id === this.settings.palette)!.name
+      : '';
+    this.recipe = formatRecipe(mode, result, paletteName);
   }
 
   update<K extends keyof Settings>(key: K, value: Settings[K]) {

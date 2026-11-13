@@ -2,9 +2,10 @@ import { compositeFrame, FLAG_FLAT, matchFrame, packRGBA } from '@ascii-fx/core'
 
 import { quantize } from './color';
 import { glyphProfile } from './glyph-profile';
-import type { RGB, Settings } from './types';
+import type { AsciiFxOptions } from './modes';
+import type { RGB } from './types';
 
-export function renderAsciiFx(image: ImageData, s: Settings, palette: RGB[]) {
+export function renderAsciiFx(image: ImageData, s: AsciiFxOptions, palette: RGB[]) {
   const cw = Math.max(2, Math.round(s.cellSize)),
     ch = Math.max(2, Math.round(cw * s.cellAspect));
   const columns = Math.ceil(image.width / cw),

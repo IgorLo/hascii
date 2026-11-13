@@ -52,6 +52,19 @@ test('new renderers and blue noise work locally, accept controls and export a PN
   await expect(page.locator('#recipe')).toContainText('32 ×');
   await expect(page.locator('#recipe')).toContainText('до 6 цветов');
 
+  await page.locator('[data-mode="halftone"]').click();
+  await controls(page, 'ascii');
+  await expect(page.locator('#halftoneColor')).toHaveValue('duotone');
+  await expect(page.locator('#halftoneSize')).toHaveValue('16');
+  await expect(page.locator('#halftoneOffsetX')).toHaveValue('4');
+  await closeControls(page);
+  await page.locator('[data-mode="pixel-art"]').click();
+  await controls(page, 'ascii');
+  await expect(page.locator('#artColumns')).toHaveValue('32');
+  await expect(page.locator('#artColors')).toHaveValue('6');
+  await closeControls(page);
+  await ready(page);
+
   const downloadReady = page.waitForEvent('download');
   await page.locator('#export').click();
   const download = await downloadReady;

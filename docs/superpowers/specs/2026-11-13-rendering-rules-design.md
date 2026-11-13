@@ -22,7 +22,7 @@ The implementation hides threshold selection, kernels, clipping and weighting. K
 
 Renderer public entry exports canonical `modeOrder`, derived `RenderMode`, and `selectMode(settings): ActiveMode`. Each discriminated branch has its mode id, domain family and narrow options. Halftone HEX conversion and flattened-name translation move into the projection. ASCII FX/png2xp/glyph-profile stop depending on the whole Settings. Legacy Pixels/ASCII keep their algorithms and normalization locations.
 
-The page-local `modePresentation`/`controlSections` and recipe formatter own labels, mode choices and section grouping. Controls, Editor, ModePicker and EditorModel use this adapter. UI derives current projections reactively. The editable settings object is not replaced on mode changes.
+The page-local `modeChoices`, `modePresentation` and `formatRecipe` own labels, mode choices and section grouping. Controls, Editor, ModePicker and EditorModel use this adapter. UI derives current projections reactively. The editable settings object is not replaced on mode changes.
 
 ## Verification
 

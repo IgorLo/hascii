@@ -12,29 +12,25 @@
     Textarea,
   } from 'svelte-ascii-ui';
 
-  import type { Settings } from '@/shared/lib/renderer';
+  import { selectMode, type Settings } from '@/shared/lib/renderer';
 
   import type { EditorModel } from '../model/editor.svelte';
+  import { modePresentation, type ToolSection } from '../model/mode-presentation';
   import { baseline, characterSets, presets, ranges } from '../model/settings';
   import ArtControls from './ArtControls.svelte';
   import PalettePicker from './PalettePicker.svelte';
 
-  let {
-    editor,
-    section = 'all',
-  }: { editor: EditorModel; section?: 'all' | 'photo' | 'tone' | 'color' | 'ascii' } = $props();
+  let { editor, section = 'all' }: { editor: EditorModel; section?: 'all' | ToolSection } =
+    $props();
   let paletteUrl = $state('');
   const palette = $derived(editor.palettes.find((p) => p.id === editor.settings.palette)!);
   const charCount = $derived(new Set(Array.from(editor.settings.chars)).size);
-  const twoColor = $derived(['ascii-fx', 'png2xp'].includes(editor.settings.mode));
-  const pixelGrid = $derived(editor.settings.mode === 'pixels');
-  const artMode = $derived(['halftone', 'pixel-art'].includes(editor.settings.mode));
-  const groups = $derived([
-    { id: 'photo', title: '01 / Отправная точка' },
-    { id: 'tone', title: '02 / Холст и тон' },
-    { id: 'color', title: '03 / Цвет и дизеринг' },
-    { id: 'ascii', title: artMode ? '04 / Настройки режима' : '04 / Символы' },
-  ]);
+  const active = $derived(selectMode(editor.settings));
+  const presentation = $derived(modePresentation(active));
+  const twoColor = $derived(presentation.controls === 'cells');
+  const pixelGrid = $derived(presentation.pixelGrid);
+  const artMode = $derived(presentation.controls === 'art');
+  const groups = $derived(presentation.sections);
   let expanded = $state<string | string[]>(['photo', 'tone', 'color', 'ascii']);
   type StringSetting = {
     [K in keyof Settings]: Settings[K] extends string ? K : never;
@@ -240,7 +236,7 @@
           : 'Настройки применяются в режимах ASCII и «Фон + ASCII».'}
       </p>
     {/if}
-    {#if editor.settings.mode === 'png2xp'}
+    {#if presentation.blocks}
       <Checkbox
         id="blockShading"
         size="s"

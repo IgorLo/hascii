@@ -4,7 +4,8 @@
 // row-major error diffusion and optional Bayer/Floyd in addition to Atkinson.
 import { clamp } from './color';
 import { bayer, createDither } from './dither';
-import type { RGB, Settings } from './types';
+import type { Png2xpOptions } from './modes';
+import type { RGB } from './types';
 
 type Kind = 'solid' | 'horizontal' | 'vertical' | 'shade25' | 'shade50';
 interface Cell {
@@ -150,7 +151,7 @@ function fitter(palette: RGB[], shading: boolean) {
   };
 }
 
-export function renderPng2xp(image: ImageData, s: Settings, palette: RGB[]) {
+export function renderPng2xp(image: ImageData, s: Png2xpOptions, palette: RGB[]) {
   const cw = Math.max(2, Math.round(s.cellSize)),
     ch = Math.max(2, Math.round(cw * s.cellAspect));
   const columns = Math.ceil(image.width / cw),

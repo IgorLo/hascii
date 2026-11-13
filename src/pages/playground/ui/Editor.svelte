@@ -3,9 +3,11 @@
   import { MediaQuery } from 'svelte/reactivity';
   import { Button, Drawer, FileInput, Link, Panel, Select } from 'svelte-ascii-ui';
 
+  import { selectMode } from '@/shared/lib/renderer';
   import { asset, resolve } from '$app/paths';
 
   import { EditorModel } from '../model/editor.svelte';
+  import { modePresentation, type ToolSection } from '../model/mode-presentation';
   import Controls from './Controls.svelte';
   import ModePicker from './ModePicker.svelte';
 
@@ -16,19 +18,9 @@
   let selectedView = $state<string | null>(null);
   const view = $derived(selectedView ?? (mobile.current ? 'result' : 'side'));
   let toolsOpen = $state(false);
-  let section = $state<'photo' | 'tone' | 'color' | 'ascii'>('photo');
-  const artMode = $derived(['halftone', 'pixel-art'].includes(editor.settings.mode));
-  const sections = $derived([
-    { value: 'photo', label: 'Фото', title: 'Фото и пресеты' },
-    { value: 'tone', label: 'Тон', title: 'Холст и тон' },
-    { value: 'color', label: 'Цвет', title: 'Цвет и дизеринг' },
-    {
-      value: 'ascii',
-      label: artMode ? 'Режим' : 'ASCII',
-      title: artMode ? 'Настройки режима' : 'Символы и фон',
-    },
-  ] as const);
-  const sectionTitle = $derived(sections.find((item) => item.value === section)!.title);
+  let section = $state<ToolSection>('photo');
+  const sections = $derived(modePresentation(selectMode(editor.settings)).sections);
+  const sectionTitle = $derived(sections.find((item) => item.id === section)!.drawerTitle);
   let dragging = $state(false);
   const views = [
     { value: 'side', label: 'Рядом' },
@@ -174,16 +166,16 @@
 
 {#if mobile.current}
   <nav class="mobile-tools" aria-label="Инструменты изображения">
-    {#each sections as item (item.value)}
+    {#each sections as item (item.id)}
       <Button
         size="s"
         fullWidth
         style="min-height: 48px"
         aria-haspopup="dialog"
-        data-tool={item.value}
+        data-tool={item.id}
         onclick={(event) => {
           event.currentTarget.focus();
-          section = item.value;
+          section = item.id;
           toolsOpen = true;
         }}
       >

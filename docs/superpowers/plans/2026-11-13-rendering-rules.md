@@ -29,10 +29,16 @@
 
 - [x] Capture baseline numeric characterization tests and all-mode/preset browser digests at `3b28fa1`; verify unchanged source passes.
 - [x] Add public policy tests (bias and resulting buffer), observe missing policy failure, implement `renderer/dither.ts`; adapt `color.ts` and `png2xp.ts` without moving fitting or sampling. Verify characterization and neighboring renderer tests; commit.
-- [ ] Add mode projection tests with explicit inactive-parameter conflicts, observe failure; implement canonical mode ids/projection/narrow option types in renderer. Route existing renderers through projection; narrow ASCII FX/png2xp/glyph profile inputs. Verify numeric and browser digests.
-- [ ] Add page presentation adapter for mode choices, section text and recipes. Replace repeated grouping in Controls/Editor/ModePicker/EditorModel; preserve exact markup and settings behavior. Run official Svelte analysis.
-- [ ] Complete Node 24 verify, compare all baseline digests, review full diff independently, resolve material findings, refresh local preview and commit remaining work.
+- [x] Add mode projection tests with explicit inactive-parameter conflicts, observe failure; implement canonical mode ids/projection/narrow option types in renderer. Route existing renderers through projection; narrow ASCII FX/png2xp/glyph profile inputs. Verify numeric and browser digests.
+- [x] Add page presentation adapter for mode choices, section text and recipes. Replace repeated grouping in Controls/Editor/ModePicker/EditorModel; preserve exact markup and settings behavior. Run official Svelte analysis.
+- [x] Complete Node 24 verify, compare all baseline digests, review full diff independently, resolve material findings, refresh local preview and commit remaining work.
 
 ## Dithering completion
 
 The pre-refactor matrix contains five SHA256 byte snapshots across RGB quantization and png2xp (three palette cases, four strengths, narrow/odd dimensions and shading on/off). The new policy tests first failed on missing dither module, then passed. All 84 tests and typecheck pass. Production browser canvas+recipe digests match all 7 modes and all 4 presets from 3b28fa1. Existing caller-specific arithmetic and Bayer block shading are retained.
+
+## Mode rules completion
+
+Projection and presentation tests first failed on their missing modules, then passed with narrow renderer options and page-owned copy/grouping. The browser regression also switches between configured art modes and checks that inactive settings survive. Official Svelte analysis found no issues in the four changed Svelte files.
+
+Final Node 24 `npm run verify` passed formatting, lint, slice boundaries, typecheck, 99 unit tests and 49 production browser scenarios (5 device-inapplicable scenarios skipped). All 11 browser canvas+recipe digests still match the baseline: seven modes and four presets. Independent review of the complete diff against `3b28fa1` found no material issues. The local production preview was refreshed on port 4175; desktop and mobile palette/mode-bar screenshots were checked.
