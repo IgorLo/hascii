@@ -179,6 +179,12 @@ test('all rendering modes, presets and preview layouts work', async ({ page }) =
     await page.locator(`[data-preset="${preset}"]`).click();
     await expect(page.locator('#export')).toBeEnabled();
     await expect(page.locator('#error')).toBeEmpty();
+    if (preset === 'soft') {
+      await tools(page, 'color');
+      await expect(page.locator('#dither')).toHaveValue('bayer');
+      await expect(page.locator('#strength')).toHaveValue('0.65');
+      await tools(page, 'photo');
+    }
   }
   await preview(page, 'result');
   await expect(page.locator('#original')).toBeHidden();

@@ -80,6 +80,8 @@ export function presetSettings(name: string, current: Settings): Settings {
     Object.assign(next, {
       mode: 'overlay',
       palette: 'dust',
+      dither: 'bayer',
+      strength: 0.65,
       overlayFill: 0.3,
       fontSize: 15,
       matching: 'shape',
