@@ -17,29 +17,29 @@ describe('mode presentation', () => {
       { value: 'png2xp', label: 'png2xp' },
     ]);
   });
-  it('keeps visible symbol controls distinct from active pixel parameters', () => {
+  it('shows pixel controls for pixels and stable task sections in every mode', () => {
     const view = modePresentation(selectMode({ ...defaults, mode: 'pixels' }));
-    expect(view.controls).toBe('symbols');
+    expect(view.controls).toBe('pixels');
     expect(view.pixelGrid).toBe(true);
     expect(view.sections).toEqual([
-      { id: 'photo', title: '01 / Отправная точка', label: 'Фото', drawerTitle: 'Фото и пресеты' },
-      { id: 'tone', title: '02 / Холст и тон', label: 'Тон', drawerTitle: 'Холст и тон' },
-      { id: 'color', title: '03 / Цвет и дизеринг', label: 'Цвет', drawerTitle: 'Цвет и дизеринг' },
-      { id: 'ascii', title: '04 / Символы', label: 'ASCII', drawerTitle: 'Символы и фон' },
+      { id: 'photo', title: 'Фото', label: 'Фото', drawerTitle: 'Фото' },
+      { id: 'style', title: 'Стиль', label: 'Стиль', drawerTitle: 'Стиль' },
+      { id: 'color', title: 'Цвет', label: 'Цвет', drawerTitle: 'Цвет' },
+      { id: 'tone', title: 'Тон', label: 'Тон', drawerTitle: 'Тон' },
     ]);
   });
   it.each(['halftone', 'pixel-art'] as const)(
-    '%s uses specialized controls and the existing tool labels',
+    '%s uses specialized controls without renaming task sections',
     (mode) => {
       const view = modePresentation(selectMode({ ...defaults, mode }));
       expect(view.controls).toBe('art');
       expect(view.pixelGrid).toBe(false);
-      expect(view.sections[3]).toEqual({
-        id: 'ascii',
-        title: '04 / Настройки режима',
-        label: 'Режим',
-        drawerTitle: 'Настройки режима',
-      });
+      expect(view.sections.map(({ id, label }) => ({ id, label }))).toEqual([
+        { id: 'photo', label: 'Фото' },
+        { id: 'style', label: 'Стиль' },
+        { id: 'color', label: 'Цвет' },
+        { id: 'tone', label: 'Тон' },
+      ]);
     },
   );
   it.each(['ascii-fx', 'png2xp'] as const)(
@@ -48,7 +48,7 @@ describe('mode presentation', () => {
       const view = modePresentation(selectMode({ ...defaults, mode }));
       expect(view.controls).toBe('cells');
       expect(view.blocks).toBe(mode === 'png2xp');
-      expect(view.sections[3].label).toBe('ASCII');
+      expect(view.sections[1].label).toBe('Стиль');
     },
   );
   it('formats automatic-palette and ink recipes from selected renderer inputs', () => {

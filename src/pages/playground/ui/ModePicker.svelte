@@ -108,7 +108,7 @@
   .forward-arrow {
     rotate: -90deg;
   }
-  @media (max-width: 760px) {
+  @media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) and (pointer: coarse) {
     .mode-picker {
       position: relative;
       inline-size: 100%;

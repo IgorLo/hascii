@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
   import { Button, Drawer, FileInput, Link, Panel, Select } from 'svelte-ascii-ui';
 
@@ -8,17 +8,29 @@
 
   import { EditorModel } from '../model/editor.svelte';
   import { modePresentation, type ToolSection } from '../model/mode-presentation';
+  import type { ranges } from '../model/settings';
   import Controls from './Controls.svelte';
   import ModePicker from './ModePicker.svelte';
+  import ParameterRange from './ParameterRange.svelte';
 
   const editor = new EditorModel();
   let original: HTMLCanvasElement;
   let result: HTMLCanvasElement;
-  const mobile = new MediaQuery('(max-width: 760px)', false);
+  const mobile = new MediaQuery(
+    '(max-width: 760px), (max-width: 1000px) and (max-height: 500px) and (pointer: coarse)',
+    false,
+  );
   let selectedView = $state<string | null>(null);
-  const view = $derived(selectedView ?? (mobile.current ? 'result' : 'side'));
+  type Parameter = keyof typeof ranges;
+  let parameter = $state<Parameter | null>(null);
+  const adjusting = $derived(mobile.current && parameter !== null);
+  const view = $derived(
+    adjusting ? 'result' : (selectedView ?? (mobile.current ? 'result' : 'side')),
+  );
   let toolsOpen = $state(false);
-  let section = $state<ToolSection>('photo');
+  let section = $state<ToolSection>('style');
+  let toolsScroller = $state<HTMLDivElement>();
+  let returnScroll = 0;
   const sections = $derived(modePresentation(selectMode(editor.settings)).sections);
   const sectionTitle = $derived(sections.find((item) => item.id === section)!.drawerTitle);
   let dragging = $state(false);
@@ -28,7 +40,42 @@
     { value: 'result', label: 'Только результат' },
   ];
   onMount(() => editor.mount(original, result));
+
+  async function editParameter(key: Parameter) {
+    returnScroll = toolsScroller?.scrollTop ?? 0;
+    parameter = key;
+    toolsOpen = false;
+    await tick();
+    document.getElementById('editor-shell')?.scrollIntoView({ block: 'start' });
+    document.getElementById(key)?.focus({ preventScroll: true });
+  }
+
+  async function backToSettings() {
+    const key = parameter;
+    parameter = null;
+    toolsOpen = true;
+    await tick();
+    if (toolsScroller) toolsScroller.scrollTop = returnScroll;
+    document.getElementById(`edit-${key}`)?.focus({ preventScroll: true });
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (adjusting && event.key === 'Escape') {
+      event.preventDefault();
+      void backToSettings();
+    }
+  }
+
+  // Viewport changes end transient phone editing, without changing image settings.
+  $effect(() => {
+    if (!mobile.current) {
+      parameter = null;
+      toolsOpen = false;
+    }
+  });
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 {#snippet upload()}
   <section
@@ -66,147 +113,205 @@
   >
 {/snippet}
 
-<header class="app-header">
-  <h1 class="brand">
-    <img class="brand-image" src={asset('/hascii-mark.png')} alt="" width="900" height="656" />
-    <Link href={resolve('/')} aria-label="HASCII — главная" size="inherit">HASCII</Link>
-  </h1>
-  <Button
-    id="export"
-    aria-label="Сохранить PNG"
-    size="s"
-    variant="primary"
-    disabled={!editor.canExport}
-    onclick={() => editor.exportPng()}>{mobile.current ? 'PNG ↓' : 'Сохранить PNG'}</Button
-  >
-</header>
+<div id="editor-shell" class={['editor-shell', { adjusting }]}>
+  <header class="app-header">
+    <h1 class="brand">
+      <img class="brand-image" src={asset('/hascii-mark.png')} alt="" width="900" height="656" />
+      <Link href={resolve('/')} aria-label="HASCII — главная" size="inherit">HASCII</Link>
+    </h1>
+    <Button
+      id="export"
+      aria-label="Сохранить PNG"
+      size="s"
+      variant="primary"
+      disabled={!editor.canExport}
+      onclick={() => editor.exportPng()}>{mobile.current ? 'PNG ↓' : 'Сохранить PNG'}</Button
+    >
+  </header>
 
-<main class="workspace">
-  {#if !mobile.current}
-    <aside class="aui-scrollbar" aria-label="Настройки изображения">
-      <div class="intro">
-        <p>Пиксели, символы и немного контролируемого шума.</p>
+  <main class="workspace">
+    {#if !mobile.current}
+      <aside class="aui-scrollbar" aria-label="Настройки изображения">
+        <div class="intro">
+          <p>Пиксели, символы и немного контролируемого шума.</p>
+        </div>
+        <Controls {editor} {upload} />
+        <footer class="hint">
+          Изображение остаётся на устройстве.<br />Только импорт палитры обращается к Lospec.
+        </footer>
+      </aside>
+    {/if}
+
+    <article class="preview-area aui-scrollbar" aria-label="Превью изображения">
+      <div class="toolbar">
+        {#if mobile.current && !toolsOpen && !adjusting}
+          <ModePicker
+            value={editor.settings.mode}
+            onchange={(mode) => editor.update('mode', mode)}
+          />
+        {/if}
+        <span id="status" role="status">{editor.status}</span>
       </div>
-      {@render upload()}
-      <Controls {editor} />
-      <footer class="hint">
-        Изображение остаётся на устройстве.<br />Только импорт палитры обращается к Lospec.
-      </footer>
-    </aside>
+      <div class="preview-toolbar" hidden={adjusting}>
+        {#if mobile.current}
+          <Select
+            showPlaceholder={false}
+            size="s"
+            aria-label="Расположение превью"
+            options={views.map((item) => ({ value: item.value, label: item.label }))}
+            bind:value={() => view, (value) => (selectedView = value || 'result')}
+          />
+        {:else}
+          <span>Превью</span>
+          <div class="button-row" role="group" aria-label="Расположение превью">
+            {#each views as item (item.value)}
+              <Button
+                size="s"
+                data-view={item.value}
+                aria-pressed={view === item.value}
+                variant={view === item.value ? 'primary' : 'default'}
+                onclick={() => (selectedView = item.value)}>{item.label}</Button
+              >
+            {/each}
+          </div>
+          <small class="hint">Расположение не влияет на PNG</small>
+        {/if}
+      </div>
+      <div id="previews" class="previews" data-view={view} aria-busy={!editor.canExport}>
+        <figure class="original-figure" hidden={view === 'result'}>
+          <figcaption>
+            <span>01 / ОРИГИНАЛ</span><span id="sourceInfo">{editor.sourceInfo}</span>
+          </figcaption>
+          <Panel size="s" style={adjusting ? 'display: flex; flex: 1; min-height: 0;' : undefined}
+            ><div class="canvas-wrap">
+              <canvas id="original" bind:this={original} aria-label="Исходное изображение"></canvas>
+            </div></Panel
+          >
+        </figure>
+        <figure>
+          <figcaption>
+            <span>02 / РЕЗУЛЬТАТ</span><span id="outputInfo">{editor.outputInfo}</span>
+          </figcaption>
+          <Panel size="s" style={adjusting ? 'display: flex; flex: 1; min-height: 0;' : undefined}
+            ><div class="canvas-wrap">
+              <canvas id="result" bind:this={result} aria-label="Обработанное изображение"></canvas>
+            </div></Panel
+          >
+        </figure>
+      </div>
+      <p id="recipe" class="recipe">{editor.recipe}</p>
+      <p id="error" class="error" role="alert">{editor.error}</p>
+      {#if editor.storageWarning}<p class="error" role="status">{editor.storageWarning}</p>{/if}
+      <div class="note" hidden={adjusting}>
+        <strong>Своя текстура, один шаг за раз.</strong>
+        <p>
+          Начни с пресета, выбери палитру, затем переключись на символы. «По форме» старается
+          сохранить линии и границы; «По яркости» даёт более ровную текстовую фактуру.
+        </p>
+        <p>
+          Пример с хаски сгенерирован. Можно загрузить свою фотографию. Сглаживание букв добавляет
+          промежуточные оттенки даже при ограниченной палитре.
+        </p>
+      </div>
+    </article>
+  </main>
+
+  {#if adjusting && parameter}
+    <section class="parameter-editor" aria-label="Редактирование параметра">
+      <div class="parameter-heading">
+        <Button size="s" onclick={() => void backToSettings()} aria-label="Назад к настройкам">
+          Назад
+        </Button>
+        <span>Настройки применяются сразу</span>
+      </div>
+      <ParameterRange {editor} setting={parameter} />
+    </section>
   {/if}
 
-  <article class="preview-area aui-scrollbar" aria-label="Превью изображения">
-    <div class="toolbar">
-      <ModePicker value={editor.settings.mode} onchange={(mode) => editor.update('mode', mode)} />
-      <span id="status" role="status">{editor.status}</span>
-    </div>
-    <div class="preview-toolbar">
-      {#if mobile.current}
-        <Select
-          showPlaceholder={false}
-          size="s"
-          aria-label="Расположение превью"
-          options={views.map((item) => ({ value: item.value, label: item.label }))}
-          bind:value={() => view, (value) => (selectedView = value || 'result')}
+  {#if mobile.current}
+    {#if !adjusting}
+      <nav class="mobile-tools" aria-label="Инструменты изображения">
+        {#each sections as item (item.id)}
+          <Button
+            size="s"
+            fullWidth
+            style="min-height: 48px"
+            aria-haspopup="dialog"
+            data-tool={item.id}
+            onclick={(event) => {
+              event.currentTarget.focus();
+              section = item.id;
+              toolsOpen = true;
+            }}
+          >
+            {item.label}
+          </Button>
+        {/each}
+      </nav>
+    {/if}
+    <Drawer
+      data-mobile-settings
+      bind:open={toolsOpen}
+      title={sectionTitle}
+      closeLabel="Закрыть настройки"
+      style="width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);"
+    >
+      <div class="mobile-settings aui-scrollbar" bind:this={toolsScroller}>
+        <Controls
+          {editor}
+          {section}
+          {upload}
+          mobile
+          onedit={editParameter}
+          showModePicker={toolsOpen}
         />
-      {:else}
-        <span>Превью</span>
-        <div class="button-row" role="group" aria-label="Расположение превью">
-          {#each views as item (item.value)}
-            <Button
-              size="s"
-              data-view={item.value}
-              aria-pressed={view === item.value}
-              variant={view === item.value ? 'primary' : 'default'}
-              onclick={() => (selectedView = item.value)}>{item.label}</Button
-            >
-          {/each}
-        </div>
-        <small class="hint">Расположение не влияет на PNG</small>
-      {/if}
-    </div>
-    <div id="previews" class="previews" data-view={view} aria-busy={!editor.canExport}>
-      <figure class="original-figure" hidden={view === 'result'}>
-        <figcaption>
-          <span>01 / ОРИГИНАЛ</span><span id="sourceInfo">{editor.sourceInfo}</span>
-        </figcaption>
-        <Panel size="s"
-          ><div class="canvas-wrap">
-            <canvas id="original" bind:this={original} aria-label="Исходное изображение"></canvas>
-          </div></Panel
-        >
-      </figure>
-      <figure>
-        <figcaption>
-          <span>02 / РЕЗУЛЬТАТ</span><span id="outputInfo">{editor.outputInfo}</span>
-        </figcaption>
-        <Panel size="s"
-          ><div class="canvas-wrap">
-            <canvas id="result" bind:this={result} aria-label="Обработанное изображение"></canvas>
-          </div></Panel
-        >
-      </figure>
-    </div>
-    <p id="recipe" class="recipe">{editor.recipe}</p>
-    <p id="error" class="error" role="alert">{editor.error}</p>
-    {#if editor.storageWarning}<p class="error" role="status">{editor.storageWarning}</p>{/if}
-    <div class="note">
-      <strong>Своя текстура, один шаг за раз.</strong>
-      <p>
-        Начни с пресета, выбери палитру, затем переключись на символы. «По форме» старается
-        сохранить линии и границы; «По яркости» даёт более ровную текстовую фактуру.
-      </p>
-      <p>
-        Пример с хаски сгенерирован. Можно загрузить свою фотографию. Размытие и сглаживание букв
-        добавляют промежуточные оттенки даже при ограниченной палитре.
-      </p>
-    </div>
-  </article>
-</main>
-
-{#if mobile.current}
-  <nav class="mobile-tools" aria-label="Инструменты изображения">
-    {#each sections as item (item.id)}
-      <Button
-        size="s"
-        fullWidth
-        style="min-height: 48px"
-        aria-haspopup="dialog"
-        data-tool={item.id}
-        onclick={(event) => {
-          event.currentTarget.focus();
-          section = item.id;
-          toolsOpen = true;
-        }}
-      >
-        {item.label}
-      </Button>
-    {/each}
-  </nav>
-  <Drawer
-    data-mobile-settings
-    bind:open={toolsOpen}
-    title={sectionTitle}
-    closeLabel="Закрыть настройки"
-    style="width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);"
-  >
-    <div class="mobile-settings aui-scrollbar">
-      {#if section === 'photo'}{@render upload()}{/if}
-      <Controls {editor} {section} />
-      {#if editor.error}<p class="error" role="alert">{editor.error}</p>{/if}
-    </div>
-    {#snippet footer()}
-      <div class="mobile-settings-footer">
-        <span class="hint" role="status">{editor.status}</span>
-        <Button fullWidth size="m" style="min-height: 48px" onclick={() => (toolsOpen = false)}>
-          Показать результат
-        </Button>
+        {#if editor.error}<p class="error" role="alert">{editor.error}</p>{/if}
       </div>
-    {/snippet}
-  </Drawer>
-{/if}
+      {#snippet footer()}
+        <div class="mobile-settings-footer">
+          <span class="hint" role="status">{editor.status}</span>
+          <Button fullWidth size="m" style="min-height: 48px" onclick={() => (toolsOpen = false)}>
+            Показать результат
+          </Button>
+        </div>
+      {/snippet}
+    </Drawer>
+  {/if}
+</div>
 
 <style>
+  .editor-shell {
+    min-height: 100dvh;
+  }
+  .editor-shell.adjusting {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .parameter-editor {
+    flex: 0 0 auto;
+    padding: 12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+    border-top: 1px dashed var(--muted);
+    background: var(--bg);
+    display: grid;
+    gap: 12px;
+  }
+  .parameter-heading {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .parameter-heading span {
+    text-align: end;
+  }
+  .preview-toolbar[hidden] {
+    display: none;
+  }
   .mobile-tools {
     position: fixed;
     inset-inline: 0;
@@ -399,7 +504,7 @@
       padding: 20px;
     }
   }
-  @media (max-width: 760px) {
+  @media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) and (pointer: coarse) {
     .app-header {
       min-height: 72px;
       padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 12px
@@ -446,6 +551,88 @@
     }
     .recipe {
       overflow-wrap: anywhere;
+    }
+    .adjusting .app-header {
+      flex: 0 0 auto;
+    }
+    .adjusting .workspace {
+      flex: 1;
+      min-height: 0;
+      padding-bottom: 0;
+    }
+    .adjusting .preview-area {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding-block: 8px;
+    }
+    .adjusting .toolbar {
+      margin-bottom: 6px;
+    }
+    .adjusting .previews {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: stretch;
+    }
+    .adjusting figure:not([hidden]) {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .adjusting .canvas-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      overflow: hidden;
+    }
+    .adjusting .previews[data-view='result'] canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      max-height: none;
+      object-fit: contain;
+    }
+    .adjusting .recipe {
+      flex: 0 0 auto;
+      margin-block: 6px 0;
+    }
+  }
+  @media (max-width: 1000px) and (max-height: 500px) and (orientation: landscape) {
+    .editor-shell.adjusting {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, 36%);
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .adjusting .app-header {
+      grid-column: 1 / -1;
+      min-height: 56px;
+      padding-block: 6px;
+    }
+    .adjusting .parameter-editor {
+      min-width: 0;
+      overflow: auto;
+      align-content: center;
+      border-top: none;
+      border-left: 1px dashed var(--muted);
+    }
+    .adjusting .parameter-heading {
+      flex-wrap: wrap;
+    }
+    .adjusting .parameter-heading span {
+      text-align: start;
+    }
+    .adjusting figcaption {
+      margin-bottom: 6px;
+    }
+    .adjusting .recipe {
+      font-size: 10px;
+      line-height: 1.5;
     }
   }
 </style>
