@@ -1,3 +1,4 @@
+import { blueNoiseThreshold } from './blue-noise';
 import type { RGB } from './types';
 export const clamp = (v: number) => Math.max(0, Math.min(255, v));
 export const luma = (r: number, g: number, b: number) =>
@@ -50,7 +51,9 @@ export function quantize(
         offset =
           algorithm === 'bayer'
             ? ((bayer[(y % 4) * 4 + (x % 4)] + 0.5) / 16 - 0.5) * 255 * strength
-            : 0;
+            : algorithm === 'blue-noise'
+              ? (blueNoiseThreshold(x, y) - 0.5) * 255 * strength
+              : 0;
       const c: RGB = [
         clamp(work[i] + offset),
         clamp(work[i + 1] + offset),

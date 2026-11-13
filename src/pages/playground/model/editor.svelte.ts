@@ -86,6 +86,15 @@ export class EditorModel {
     this.status = `Готово · ${Math.round(result.ms)} мс`;
     this.canExport = true;
     const palette = this.palettes.find((p) => p.id === this.settings.palette)!;
+    if (this.settings.mode === 'halftone') {
+      const colors = { mono: 'одна краска', cmyk: 'CMYK', duotone: 'две краски' };
+      this.recipe = `Halftone · ${this.settings.halftoneSize} px · ${this.settings.halftoneAngle}° · ${colors[this.settings.halftoneColor]}`;
+      return;
+    }
+    if (this.settings.mode === 'pixel-art') {
+      this.recipe = `Pixel Art · ${result.columns} × ${result.rows} пикселей · до ${this.settings.artColors} цветов · автоматическая палитра`;
+      return;
+    }
     this.recipe = `${result.columns} × ${result.rows} ячеек · ${this.settings.paletteEnabled ? palette.name : 'исходные цвета'} · ${this.settings.paletteEnabled ? this.settings.dither : 'без дизеринга'}${result.glyphs ? ' · ' + result.glyphs + ' символов' : ''}`;
   }
 

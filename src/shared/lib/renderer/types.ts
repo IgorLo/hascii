@@ -7,7 +7,21 @@ export interface Palette {
   url?: string;
 }
 export interface Settings {
-  mode: 'pixels' | 'ascii' | 'overlay' | 'ascii-fx' | 'png2xp';
+  mode: 'pixels' | 'ascii' | 'overlay' | 'ascii-fx' | 'png2xp' | 'halftone' | 'pixel-art';
+  halftoneSize: number;
+  halftoneAngle: number;
+  halftoneShape: 'round' | 'diamond' | 'line';
+  halftoneColor: 'mono' | 'cmyk' | 'duotone';
+  halftoneInk: string;
+  halftonePaper: string;
+  halftoneInkB: string;
+  halftoneAngleB: number;
+  halftoneBalance: number;
+  halftoneOffsetX: number;
+  halftoneOffsetY: number;
+  artColumns: number;
+  artColors: number;
+  artIterations: number;
   cellSize: number;
   cellAspect: number;
   blockShading: boolean;
@@ -20,7 +34,7 @@ export interface Settings {
   pixelSize: number;
   paletteEnabled: boolean;
   palette: string;
-  dither: 'none' | 'bayer' | 'floyd' | 'atkinson';
+  dither: 'none' | 'bayer' | 'floyd' | 'atkinson' | 'blue-noise';
   strength: number;
   font: string;
   fontSize: number;

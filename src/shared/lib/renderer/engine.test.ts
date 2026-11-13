@@ -10,6 +10,20 @@ beforeAll(() => {
 });
 
 const settings: Settings = {
+  halftoneSize: 12,
+  halftoneAngle: 45,
+  halftoneShape: 'round',
+  halftoneColor: 'mono',
+  halftoneInk: '#000000',
+  halftonePaper: '#ffffff',
+  halftoneInkB: '#e83d86',
+  halftoneAngleB: 75,
+  halftoneBalance: 0.5,
+  halftoneOffsetX: 0,
+  halftoneOffsetY: 0,
+  artColumns: 16,
+  artColors: 8,
+  artIterations: 4,
   mode: 'ascii',
   cellSize: 8,
   cellAspect: 1,
@@ -57,6 +71,34 @@ function run(overrides: Partial<Settings> = {}, value = 255) {
   });
 }
 describe('renderer regressions', () => {
+  it('png2xp applies blue noise to palette fitting and respects zero strength', () => {
+    const source = uniform(128);
+    const job = {
+      id: 1,
+      image: source,
+      settings: {
+        ...settings,
+        mode: 'png2xp' as const,
+        cellSize: 2,
+        blockShading: false,
+        dither: 'none' as const,
+      },
+      palette: [
+        [0, 0, 0],
+        [255, 255, 255],
+      ] as [number, number, number][],
+    };
+    const plain = render(job).image!;
+    const blue = render({
+      ...job,
+      settings: { ...job.settings, dither: 'blue-noise', strength: 1 },
+    }).image!;
+    expect(blue.data).not.toEqual(plain.data);
+    expect(
+      render({ ...job, settings: { ...job.settings, dither: 'blue-noise', strength: 0 } }).image!
+        .data,
+    ).toEqual(plain.data);
+  });
   it.each(['#000000', '#eee9de'])(
     'zero cell fill is exactly the same ASCII on %s',
     (background) => {

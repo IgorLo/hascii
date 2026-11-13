@@ -2,6 +2,7 @@
 // 8ff75d0c5a8d2745a8ad6a8a841dd31a46e81635. See static/licenses/asciicker.txt.
 // Differences: arbitrary palettes, browser-local sampling, adjustable cell geometry,
 // row-major error diffusion and optional Bayer/Floyd in addition to Atkinson.
+import { blueNoiseThreshold } from './blue-noise';
 import { bayer, clamp } from './color';
 import type { RGB, Settings } from './types';
 
@@ -217,7 +218,9 @@ export function renderPng2xp(image: ImageData, s: Settings, palette: RGB[]) {
       const bias =
         palette.length && s.dither === 'bayer'
           ? ((bayer[(cy % 4) * 4 + (cx % 4)] + 0.5) / 16 - 0.5) * 255 * s.strength
-          : 0;
+          : palette.length && s.dither === 'blue-noise'
+            ? (blueNoiseThreshold(cx, cy) - 0.5) * 255 * s.strength
+            : 0;
       const four = [0, 1, 2, 3].map((q) => {
         const i = ((cy * 2 + (q >> 1)) * sw + cx * 2 + (q % 2)) * 3;
         return [0, 1, 2].map((k) => Math.round(clamp(samples[i + k] + bias))) as RGB;

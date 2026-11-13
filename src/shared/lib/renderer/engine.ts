@@ -1,5 +1,7 @@
 import { surface } from './canvas';
 import { clamp, luma, quantize } from './color';
+import { renderHalftone } from './halftone';
+import { renderPixelArt } from './pixel-art';
 import { renderPng2xp } from './png2xp';
 import { renderAsciiFx } from './two-color';
 import type { Job, Result, RGB, Settings } from './types.js';
@@ -87,6 +89,39 @@ export function render(job: Job): Result {
     return {
       id: job.id,
       ...renderPng2xp(new ImageData(corrected, w, h), s, s.paletteEnabled ? job.palette : []),
+      ms: performance.now() - start,
+    };
+  if (s.mode === 'halftone') {
+    const color = (hex: string): RGB => {
+      const value = Number.parseInt(hex.slice(1), 16);
+      return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+    };
+    return {
+      id: job.id,
+      ...renderHalftone(new ImageData(corrected, w, h), {
+        size: s.halftoneSize,
+        angle: s.halftoneAngle,
+        shape: s.halftoneShape,
+        colorMode: s.halftoneColor,
+        ink: color(s.halftoneInk),
+        paper: color(s.halftonePaper),
+        inkB: color(s.halftoneInkB),
+        angleB: s.halftoneAngleB,
+        balance: s.halftoneBalance,
+        offsetX: s.halftoneOffsetX,
+        offsetY: s.halftoneOffsetY,
+      }),
+      ms: performance.now() - start,
+    };
+  }
+  if (s.mode === 'pixel-art')
+    return {
+      id: job.id,
+      ...renderPixelArt(new ImageData(corrected, w, h), {
+        columns: s.artColumns,
+        colorCount: s.artColors,
+        iterations: s.artIterations,
+      }),
       ms: performance.now() - start,
     };
   const original = surface(w, h);
