@@ -3,11 +3,13 @@
   import { MediaQuery } from 'svelte/reactivity';
   import { Button, Drawer, FileInput, Link, Panel, Select } from 'svelte-ascii-ui';
 
-  import type { Settings } from '@/shared/lib/renderer';
+  import { selectMode } from '@/shared/lib/renderer';
   import { asset, resolve } from '$app/paths';
 
   import { EditorModel } from '../model/editor.svelte';
+  import { modePresentation, type ToolSection } from '../model/mode-presentation';
   import Controls from './Controls.svelte';
+  import ModePicker from './ModePicker.svelte';
 
   const editor = new EditorModel();
   let original: HTMLCanvasElement;
@@ -16,22 +18,10 @@
   let selectedView = $state<string | null>(null);
   const view = $derived(selectedView ?? (mobile.current ? 'result' : 'side'));
   let toolsOpen = $state(false);
-  let section = $state<'photo' | 'tone' | 'color' | 'ascii'>('photo');
-  const sections = [
-    { value: 'photo', label: 'Фото', title: 'Фото и пресеты' },
-    { value: 'tone', label: 'Тон', title: 'Холст и тон' },
-    { value: 'color', label: 'Цвет', title: 'Цвет и дизеринг' },
-    { value: 'ascii', label: 'ASCII', title: 'Символы и фон' },
-  ] as const;
-  const sectionTitle = $derived(sections.find((item) => item.value === section)!.title);
+  let section = $state<ToolSection>('photo');
+  const sections = $derived(modePresentation(selectMode(editor.settings)).sections);
+  const sectionTitle = $derived(sections.find((item) => item.id === section)!.drawerTitle);
   let dragging = $state(false);
-  const modes: { value: Settings['mode']; label: string }[] = [
-    { value: 'pixels', label: 'Пиксели' },
-    { value: 'ascii', label: 'ASCII' },
-    { value: 'overlay', label: 'Фон + ASCII' },
-    { value: 'ascii-fx', label: 'ASCII FX' },
-    { value: 'png2xp', label: 'png2xp' },
-  ];
   const views = [
     { value: 'side', label: 'Рядом' },
     { value: 'stack', label: 'Сверху вниз' },
@@ -107,17 +97,7 @@
 
   <article class="preview-area aui-scrollbar" aria-label="Превью изображения">
     <div class="toolbar">
-      <div class="button-row" role="group" aria-label="Режим отрисовки">
-        {#each modes as mode (mode.value)}
-          <Button
-            size="s"
-            data-mode={mode.value}
-            aria-pressed={editor.settings.mode === mode.value}
-            variant={editor.settings.mode === mode.value ? 'primary' : 'default'}
-            onclick={() => editor.update('mode', mode.value)}>{mode.label}</Button
-          >
-        {/each}
-      </div>
+      <ModePicker value={editor.settings.mode} onchange={(mode) => editor.update('mode', mode)} />
       <span id="status" role="status">{editor.status}</span>
     </div>
     <div class="preview-toolbar">
@@ -186,16 +166,16 @@
 
 {#if mobile.current}
   <nav class="mobile-tools" aria-label="Инструменты изображения">
-    {#each sections as item (item.value)}
+    {#each sections as item (item.id)}
       <Button
         size="s"
         fullWidth
         style="min-height: 48px"
         aria-haspopup="dialog"
-        data-tool={item.value}
+        data-tool={item.id}
         onclick={(event) => {
           event.currentTarget.focus();
-          section = item.value;
+          section = item.id;
           toolsOpen = true;
         }}
       >
@@ -459,6 +439,8 @@
       object-fit: contain;
     }
     .toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
       gap: 8px;
       margin-bottom: 12px;
     }

@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`dithering output compatibility > atkinson preserves pixel quantization and quarter-cell fitting bytes 1`] = `"0a6173aa37ab453269ce167d15dc18d7b679cf96d9340e7125f7fee17c85280e"`;
+
+exports[`dithering output compatibility > bayer preserves pixel quantization and quarter-cell fitting bytes 1`] = `"41c0314e505bc29eb750df5163e03c79c2436277faadb996c53438db82096eea"`;
+
+exports[`dithering output compatibility > blue-noise preserves pixel quantization and quarter-cell fitting bytes 1`] = `"300ca410777f80ebf7f055404a5989d8e65ba76e240cf496cd333ec70dd10e39"`;
+
+exports[`dithering output compatibility > floyd preserves pixel quantization and quarter-cell fitting bytes 1`] = `"05dc30433cd85f95fd0b7973c3326c07a398fd98ee374c068ccc76e7d78c4c50"`;
+
+exports[`dithering output compatibility > none preserves pixel quantization and quarter-cell fitting bytes 1`] = `"f1c60f25ac064ec5c260d67007ff03fc1f68a10d7523486fc834d2d3f951d46b"`;

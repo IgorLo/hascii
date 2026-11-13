@@ -54,6 +54,7 @@ async function expectThemedScrollbars(page: Page) {
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#export')).toBeEnabled({ timeout: 20000 });
+  await page.locator('[data-mode="pixels"]').click();
 });
 
 test('cell-fill overlay keeps ASCII unchanged at zero and locks the pixel grid', async ({
@@ -89,7 +90,11 @@ test('cell-fill overlay keeps ASCII unchanged at zero and locks the pixel grid',
 
 test('PICO-8 two-color modes expose their controls and export real PNGs', async ({ page }) => {
   await tools(page, 'color');
-  await page.locator('#palette').selectOption('pico-8');
+  await page.locator('#palette').click();
+  await page
+    .getByRole('dialog', { name: 'Выбор палитры' })
+    .getByRole('button', { name: 'PICO-8 · 16 цветов', exact: true })
+    .click();
   await closeTools(page);
   for (const mode of ['ascii-fx', 'png2xp']) {
     await page.locator(`[data-mode="${mode}"]`).click();
@@ -174,6 +179,12 @@ test('all rendering modes, presets and preview layouts work', async ({ page }) =
     await page.locator(`[data-preset="${preset}"]`).click();
     await expect(page.locator('#export')).toBeEnabled();
     await expect(page.locator('#error')).toBeEmpty();
+    if (preset === 'soft') {
+      await tools(page, 'color');
+      await expect(page.locator('#dither')).toHaveValue('bayer');
+      await expect(page.locator('#strength')).toHaveValue('0.65');
+      await tools(page, 'photo');
+    }
   }
   await preview(page, 'result');
   await expect(page.locator('#original')).toBeHidden();
@@ -207,6 +218,7 @@ test('settings, empty-alphabet recovery and persistence', async ({ page }) => {
   await page.locator('#opacity').fill('1');
   await expect(page.locator('#export')).toBeEnabled();
   await page.reload();
+  await page.locator('[data-mode="ascii"]').click();
   await tools(page, 'ascii');
   await expect(page.locator('#chars')).toHaveValue('+#@');
 });
@@ -221,10 +233,17 @@ test('imports and persists a palette and recovers from import errors', async ({ 
   await page.locator('#paletteUrl').fill('https://lospec.com/palette-list/test-palette');
   await page.locator('#import').click();
   await expect(page.locator('#importStatus')).toContainText('Добавлена');
-  await expect(page.locator('#palette')).toHaveValue('test-palette');
+  await expect(page.locator('#palette')).toContainText('Test Palette');
   await page.reload();
+  await page.locator('[data-mode="pixels"]').click();
   await tools(page, 'color');
-  await expect(page.locator('#palette option[value="test-palette"]')).toHaveCount(1);
+  await page.locator('#palette').click();
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Выбор палитры' })
+      .getByRole('button', { name: 'Test Palette · 3 цветов', exact: true }),
+  ).toHaveCount(1);
+  await page.keyboard.press('Escape');
   await page.locator('#paletteUrl').fill('https://example.com/wrong');
   await page.locator('#import').click();
   await expect(page.locator('#importStatus')).toContainText('lospec.com');

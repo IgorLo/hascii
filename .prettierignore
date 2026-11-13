@@ -7,4 +7,6 @@ work
 .superpowers
 test-results
 playwright-report
+.playwright-cli
+.impeccable/critique
 coverage

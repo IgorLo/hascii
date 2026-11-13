@@ -12,27 +12,26 @@
     Textarea,
   } from 'svelte-ascii-ui';
 
-  import type { Settings } from '@/shared/lib/renderer';
+  import { selectMode, type Settings } from '@/shared/lib/renderer';
 
   import type { EditorModel } from '../model/editor.svelte';
+  import { modePresentation, type ToolSection } from '../model/mode-presentation';
   import { baseline, characterSets, presets, ranges } from '../model/settings';
+  import ArtControls from './ArtControls.svelte';
+  import PalettePicker from './PalettePicker.svelte';
 
-  let {
-    editor,
-    section = 'all',
-  }: { editor: EditorModel; section?: 'all' | 'photo' | 'tone' | 'color' | 'ascii' } = $props();
+  let { editor, section = 'all' }: { editor: EditorModel; section?: 'all' | ToolSection } =
+    $props();
   let paletteUrl = $state('');
   const palette = $derived(editor.palettes.find((p) => p.id === editor.settings.palette)!);
   const charCount = $derived(new Set(Array.from(editor.settings.chars)).size);
-  const twoColor = $derived(['ascii-fx', 'png2xp'].includes(editor.settings.mode));
-  const pixelGrid = $derived(editor.settings.mode === 'pixels');
-  const groups = [
-    { id: 'photo', title: '01 / Отправная точка' },
-    { id: 'tone', title: '02 / Холст и тон' },
-    { id: 'color', title: '03 / Цвет и дизеринг' },
-    { id: 'ascii', title: '04 / Символы' },
-  ];
-  let expanded = $state<string | string[]>(groups.map((group) => group.id));
+  const active = $derived(selectMode(editor.settings));
+  const presentation = $derived(modePresentation(active));
+  const twoColor = $derived(presentation.controls === 'cells');
+  const pixelGrid = $derived(presentation.pixelGrid);
+  const artMode = $derived(presentation.controls === 'art');
+  const groups = $derived(presentation.sections);
+  let expanded = $state<string | string[]>(['photo', 'tone', 'color', 'ascii']);
   type StringSetting = {
     [K in keyof Settings]: Settings[K] extends string ? K : never;
   }[keyof Settings];
@@ -127,90 +126,97 @@
     {@render range('brightness', !editor.settings.correction)}
     {@render range('contrast', !editor.settings.correction)}
     {@render range('saturation', !editor.settings.correction)}
-    <Checkbox
-      id="pixelate"
-      size="s"
-      label="Пикселизация"
-      disabled={!pixelGrid}
-      bind:checked={() => editor.settings.pixelate, (value) => editor.update('pixelate', value)}
-    />
-    {@render range('pixelSize', !editor.settings.pixelate || !pixelGrid)}
+    {#if !artMode}
+      <Checkbox
+        id="pixelate"
+        size="s"
+        label="Пикселизация"
+        disabled={!pixelGrid}
+        bind:checked={() => editor.settings.pixelate, (value) => editor.update('pixelate', value)}
+      />
+      {@render range('pixelSize', !editor.settings.pixelate || !pixelGrid)}
+    {/if}
     <p class="hint">
-      {editor.settings.mode === 'overlay'
-        ? 'Фон повторяет сетку ASCII. Размер символа и интервалы управляют всей ячейкой; отдельного размера пикселя здесь нет.'
-        : !pixelGrid
-          ? 'Размер ячейки задаётся в разделе «Символы». Пикселизация фона здесь не применяется.'
-          : 'Размер пикселя меняет цветные блоки фона. ASCII имеет отдельную сетку.'}
+      {artMode
+        ? 'Параметры растра и пиксельной сетки находятся в настройках режима.'
+        : editor.settings.mode === 'overlay'
+          ? 'Фон повторяет сетку ASCII. Размер символа и интервалы управляют всей ячейкой; отдельного размера пикселя здесь нет.'
+          : !pixelGrid
+            ? 'Размер ячейки задаётся в разделе «Символы». Пикселизация фона здесь не применяется.'
+            : 'Размер пикселя меняет цветные блоки фона. ASCII имеет отдельную сетку.'}
     </p>
   </div>
 {/snippet}
 
 {#snippet color()}
-  <div class="control-stack">
-    <Checkbox
-      id="paletteEnabled"
-      size="s"
-      label="Ограничить палитру"
-      bind:checked={
-        () => editor.settings.paletteEnabled, (value) => editor.update('paletteEnabled', value)
-      }
-    />
-    {@render select(
-      'palette',
-      'Палитра',
-      editor.palettes.map((p) => ({ value: p.id, label: p.name })),
-    )}
-    <div id="swatches" class="swatches aui-scrollbar" aria-label={`Цвета палитры ${palette.name}`}>
-      {#each palette.colors as color, i (`${i}-${color}`)}<span
-          style:--swatch={`#${color}`}
-          title={`#${color}`}>█</span
-        >{/each}
-    </div>
+  {#if artMode}
     <p class="hint">
-      {palette.colors.length} цветов · {palette.author}
-      {#if palette.url}<Link
-          size="inherit"
-          href={palette.url}
-          target="_blank"
-          rel="noopener noreferrer">Lospec ↗</Link
-        >{/if}
+      {editor.settings.mode === 'halftone'
+        ? 'В этом режиме цвета задаются красками и бумагой в настройках Halftone. Палитра Lospec и отдельный дизеринг не применяются.'
+        : 'Pixel Art подбирает свою палитру вместе с деталями изображения. Число цветов задаётся в настройках режима; отдельный дизеринг не применяется.'}
     </p>
-    <form
-      class="import-form"
-      onsubmit={(event) => {
-        event.preventDefault();
-        void editor.importPalette(paletteUrl);
-      }}
-    >
-      <Field id="paletteUrl" label="Ссылка или имя палитры Lospec">
-        {#snippet children(control)}<Input
-            {...control}
-            size="s"
-            bind:value={paletteUrl}
-            placeholder="Lospec: ссылка или sweetie-16"
-          />{/snippet}
-      </Field>
-      <Button id="import" type="submit" size="s" loading={editor.importing}
-        >Импортировать палитру</Button
+  {:else}
+    <div class="control-stack">
+      <Checkbox
+        id="paletteEnabled"
+        size="s"
+        label="Ограничить палитру"
+        bind:checked={
+          () => editor.settings.paletteEnabled, (value) => editor.update('paletteEnabled', value)
+        }
+      />
+      <PalettePicker
+        palettes={editor.palettes}
+        value={editor.settings.palette}
+        onchange={(value) => editor.update('palette', value)}
+      />
+      <p class="hint">
+        {palette.colors.length} цветов · {palette.author}
+        {#if palette.url}<Link
+            size="inherit"
+            href={palette.url}
+            target="_blank"
+            rel="noopener noreferrer">Lospec ↗</Link
+          >{/if}
+      </p>
+      <form
+        class="import-form"
+        onsubmit={(event) => {
+          event.preventDefault();
+          void editor.importPalette(paletteUrl);
+        }}
       >
-    </form>
-    <p id="importStatus" class="hint" role="status">{editor.importStatus}</p>
-    {@render select(
-      'dither',
-      'Дизеринг',
-      [
-        { value: 'none', label: 'Выключен' },
-        { value: 'bayer', label: 'Bayer · регулярный 4×4' },
-        { value: 'floyd', label: 'Floyd–Steinberg · зерно' },
-        { value: 'atkinson', label: 'Atkinson · разреженный' },
-      ],
-      !editor.settings.paletteEnabled,
-    )}
-    {@render range(
-      'strength',
-      !editor.settings.paletteEnabled || editor.settings.dither === 'none',
-    )}
-  </div>
+        <Field id="paletteUrl" label="Ссылка или имя палитры Lospec">
+          {#snippet children(control)}<Input
+              {...control}
+              size="s"
+              bind:value={paletteUrl}
+              placeholder="Lospec: ссылка или sweetie-16"
+            />{/snippet}
+        </Field>
+        <Button id="import" type="submit" size="s" loading={editor.importing}
+          >Импортировать палитру</Button
+        >
+      </form>
+      <p id="importStatus" class="hint" role="status">{editor.importStatus}</p>
+      {@render select(
+        'dither',
+        'Дизеринг',
+        [
+          { value: 'none', label: 'Выключен' },
+          { value: 'bayer', label: 'Bayer · регулярный 4×4' },
+          { value: 'floyd', label: 'Floyd–Steinberg · зерно' },
+          { value: 'atkinson', label: 'Atkinson · разреженный' },
+          { value: 'blue-noise', label: 'Blue noise · нерегулярный' },
+        ],
+        !editor.settings.paletteEnabled,
+      )}
+      {@render range(
+        'strength',
+        !editor.settings.paletteEnabled || editor.settings.dither === 'none',
+      )}
+    </div>
+  {/if}
 {/snippet}
 
 {#snippet ascii()}
@@ -230,7 +236,7 @@
           : 'Настройки применяются в режимах ASCII и «Фон + ASCII».'}
       </p>
     {/if}
-    {#if editor.settings.mode === 'png2xp'}
+    {#if presentation.blocks}
       <Checkbox
         id="blockShading"
         size="s"
@@ -337,7 +343,7 @@
   {:else if id === 'color'}
     {@render color()}
   {:else if id === 'ascii'}
-    {@render ascii()}
+    {#if artMode}<ArtControls {editor} />{:else}{@render ascii()}{/if}
   {/if}
 {/snippet}
 
@@ -387,17 +393,5 @@
     line-height: 1.65;
     margin: 0;
     overflow-wrap: anywhere;
-  }
-  .swatches {
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-    max-height: 180px;
-    overflow: auto;
-  }
-  .swatches span {
-    color: var(--swatch);
-    font-size: 24px;
-    line-height: 1;
   }
 </style>

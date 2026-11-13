@@ -10,6 +10,20 @@ beforeAll(() => {
 });
 
 const settings: Settings = {
+  halftoneSize: 12,
+  halftoneAngle: 45,
+  halftoneShape: 'round',
+  halftoneColor: 'mono',
+  halftoneInk: '#000000',
+  halftonePaper: '#ffffff',
+  halftoneInkB: '#e83d86',
+  halftoneAngleB: 75,
+  halftoneBalance: 0.5,
+  halftoneOffsetX: 0,
+  halftoneOffsetY: 0,
+  artColumns: 16,
+  artColors: 8,
+  artIterations: 4,
   mode: 'ascii',
   cellSize: 8,
   cellAspect: 1,
@@ -56,7 +70,101 @@ function run(overrides: Partial<Settings> = {}, value = 255) {
     palette: [[value, value, value]],
   });
 }
+
+// Byte baselines captured from 3b28fa1 before changing either rendering path.
+// Font-free fixtures make the reference independent of host font rendering.
+describe('dithering output compatibility', () => {
+  it.each(['none', 'bayer', 'floyd', 'atkinson', 'blue-noise'] as const)(
+    '%s preserves pixel quantization and quarter-cell fitting bytes',
+    (algorithm) => {
+      const hash = createHash('sha256');
+      const palettes: [number, number, number][][] = [
+        [],
+        [[127, 127, 127]],
+        [
+          [0, 0, 0],
+          [255, 255, 255],
+          [255, 0, 85],
+          [29, 90, 164],
+        ],
+      ];
+      for (const palette of palettes)
+        for (const strength of [0, 0.1, 0.65, 1])
+          for (const [width, height, cellSize, cellAspect] of [
+            [1, 7, 3, 1.7],
+            [7, 1, 2, 1],
+            [17, 13, 3, 1.7],
+          ]) {
+            const values = Float32Array.from(
+              { length: width * height * 3 },
+              (_, i) => [-10.25, 0.5, 127.49, 127.5, 128.5, 260.75][i % 6] + (i % 13) / 17,
+            );
+            hash.update(quantize(values, width, height, palette, algorithm, strength));
+            const data = new Uint8ClampedArray(width * height * 4);
+            for (let i = 0; i < width * height; i++) {
+              data[i * 4] = (i * 37 + 51) % 256;
+              data[i * 4 + 1] = (i * 59 + 113) % 256;
+              data[i * 4 + 2] = (i * 83 + 7) % 256;
+              data[i * 4 + 3] = 255;
+            }
+            for (const blockShading of [false, true]) {
+              const result = render({
+                id: 1,
+                image: new ImageData(data, width, height),
+                settings: {
+                  ...settings,
+                  mode: 'png2xp',
+                  cellSize,
+                  cellAspect,
+                  blockShading,
+                  dither: algorithm,
+                  strength,
+                },
+                palette,
+              });
+              hash.update(result.image!.data);
+              hash.update(JSON.stringify([result.columns, result.rows, result.glyphs]));
+            }
+          }
+      expect(hash.digest('hex')).toMatchSnapshot();
+    },
+  );
+  it('unknown quantize methods keep the existing no-dither behavior', () => {
+    const values = new Float32Array([127.49, 127.5, 128.5, 180.2, 0.5, 260.1]);
+    expect(quantize(values, 2, 1, [], 'unknown', 0.65)).toEqual(
+      quantize(values, 2, 1, [], 'none', 0.65),
+    );
+  });
+});
 describe('renderer regressions', () => {
+  it('png2xp applies blue noise to palette fitting and respects zero strength', () => {
+    const source = uniform(128);
+    const job = {
+      id: 1,
+      image: source,
+      settings: {
+        ...settings,
+        mode: 'png2xp' as const,
+        cellSize: 2,
+        blockShading: false,
+        dither: 'none' as const,
+      },
+      palette: [
+        [0, 0, 0],
+        [255, 255, 255],
+      ] as [number, number, number][],
+    };
+    const plain = render(job).image!;
+    const blue = render({
+      ...job,
+      settings: { ...job.settings, dither: 'blue-noise', strength: 1 },
+    }).image!;
+    expect(blue.data).not.toEqual(plain.data);
+    expect(
+      render({ ...job, settings: { ...job.settings, dither: 'blue-noise', strength: 0 } }).image!
+        .data,
+    ).toEqual(plain.data);
+  });
   it.each(['#000000', '#eee9de'])(
     'zero cell fill is exactly the same ASCII on %s',
     (background) => {
@@ -353,3 +461,4 @@ describe('renderer regressions', () => {
     expect(run({ chars: '', allowEmpty: true }).image).toBeDefined();
   });
 });
+import { createHash } from 'node:crypto';

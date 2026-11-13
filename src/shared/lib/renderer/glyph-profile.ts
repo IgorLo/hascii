@@ -1,12 +1,12 @@
 import type { AsciiProfile } from '@ascii-fx/core';
 
 import { surface } from './canvas';
-import type { Settings } from './types';
+import type { GlyphProfileOptions } from './modes';
 
 let cached: { key: string; profile: AsciiProfile } | undefined;
 
 /** Bounded, ephemeral profile using the same font and spacing as the output grid. */
-export function glyphProfile(s: Settings, cw: number, ch: number): AsciiProfile {
+export function glyphProfile(s: GlyphProfileOptions, cw: number, ch: number): AsciiProfile {
   const characters = [...new Set(Array.from((s.allowEmpty ? ' ' : '') + s.chars))]
     .filter((char) => !/[\r\n\t]/.test(char) && (s.allowEmpty || char.trim()))
     .slice(0, 512);

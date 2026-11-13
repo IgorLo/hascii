@@ -1,4 +1,6 @@
+import { createDither } from './dither';
 import type { RGB } from './types';
+export { bayer } from './dither';
 export const clamp = (v: number) => Math.max(0, Math.min(255, v));
 export const luma = (r: number, g: number, b: number) =>
   (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
@@ -15,7 +17,6 @@ export function nearest(c: RGB, p: RGB[]): RGB {
   }
   return best;
 }
-export const bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 export function quantize(
   input: Float32Array,
   w: number,
@@ -26,31 +27,22 @@ export function quantize(
 ): Uint8ClampedArray<ArrayBuffer> {
   const work = new Float32Array(input),
     out = new Uint8ClampedArray(w * h * 4);
-  const kernel =
-    algorithm === 'floyd'
-      ? [
-          [1, 0, 7 / 16],
-          [-1, 1, 3 / 16],
-          [0, 1, 5 / 16],
-          [1, 1, 1 / 16],
-        ]
-      : algorithm === 'atkinson'
-        ? [
-            [1, 0, 1 / 8],
-            [2, 0, 1 / 8],
-            [-1, 1, 1 / 8],
-            [0, 1, 1 / 8],
-            [1, 1, 1 / 8],
-            [0, 2, 1 / 8],
-          ]
-        : [];
+  const policy = createDither({
+    algorithm,
+    strength,
+    width: w,
+    height: h,
+    addError: (x, y, red, green, blue) => {
+      const i = (y * w + x) * 3;
+      work[i] += red;
+      work[i + 1] += green;
+      work[i + 2] += blue;
+    },
+  });
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 3,
-        offset =
-          algorithm === 'bayer'
-            ? ((bayer[(y % 4) * 4 + (x % 4)] + 0.5) / 16 - 0.5) * 255 * strength
-            : 0;
+        offset = policy.biasAt(x, y);
       const c: RGB = [
         clamp(work[i] + offset),
         clamp(work[i + 1] + offset),
@@ -59,14 +51,7 @@ export function quantize(
       const chosen = p.length ? nearest(c, p) : c;
       for (let k = 0; k < 3; k++) out[(y * w + x) * 4 + k] = chosen[k];
       out[(y * w + x) * 4 + 3] = 255;
-      if (p.length)
-        for (const [dx, dy, weight] of kernel) {
-          const nx = x + dx,
-            ny = y + dy;
-          if (nx < 0 || nx >= w || ny >= h) continue;
-          for (let k = 0; k < 3; k++)
-            work[(ny * w + nx) * 3 + k] += (c[k] - chosen[k]) * weight * strength;
-        }
+      if (p.length) policy.diffuse(x, y, c, chosen);
     }
   return out;
 }
