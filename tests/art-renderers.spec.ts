@@ -1,15 +1,13 @@
 import { expect, type Page, test } from '@playwright/test';
 
-async function controls(page: Page, section: string) {
-  const close = page.getByRole('button', { name: 'Показать результат', exact: true });
-  if (await close.isVisible()) await close.click();
-  const trigger = page.locator(`[data-tool="${section}"]`);
-  if (await trigger.isVisible()) await trigger.click();
-}
-async function closeControls(page: Page) {
-  const close = page.getByRole('button', { name: 'Показать результат', exact: true });
-  if (await close.isVisible()) await close.click();
-}
+import {
+  closeTools as closeControls,
+  expectRange,
+  selectMode,
+  setRange,
+  tools as controls,
+} from './helpers/editor';
+
 async function ready(page: Page) {
   await expect(page.locator('#export')).toBeEnabled({ timeout: 30000 });
   await expect(page.locator('#error')).toBeEmpty();
@@ -26,42 +24,46 @@ test('new renderers and blue noise work locally, accept controls and export a PN
   });
   await page.goto('/');
   await ready(page);
-  await page.locator('[data-mode="pixels"]').click();
+  await selectMode(page, 'pixels');
   await controls(page, 'color');
   await page.locator('#dither').selectOption('blue-noise');
   await closeControls(page);
   await ready(page);
   await expect(page.locator('#recipe')).toContainText('blue-noise');
 
-  await page.locator('[data-mode="halftone"]').click();
-  await controls(page, 'ascii');
+  await selectMode(page, 'halftone');
+  await controls(page, 'color');
   await page.locator('#halftoneColor').selectOption('duotone');
-  await page.locator('#halftoneSize').fill('16');
-  await page.locator('#halftoneOffsetX').fill('4');
+  await controls(page, 'style');
+  await setRange(page, 'halftoneSize', '16');
+  await setRange(page, 'halftoneOffsetX', '4');
   await closeControls(page);
   await ready(page);
   await expect(page.locator('#recipe')).toContainText('две краски');
   await expect(page.locator('#recipe')).toContainText('16 px');
 
-  await page.locator('[data-mode="pixel-art"]').click();
-  await controls(page, 'ascii');
-  await page.locator('#artColumns').fill('32');
-  await page.locator('#artColors').fill('6');
+  await selectMode(page, 'pixel-art');
+  await controls(page, 'style');
+  await setRange(page, 'artColumns', '32');
+  await controls(page, 'color');
+  await setRange(page, 'artColors', '6');
   await closeControls(page);
   await ready(page);
   await expect(page.locator('#recipe')).toContainText('32 ×');
   await expect(page.locator('#recipe')).toContainText('до 6 цветов');
 
-  await page.locator('[data-mode="halftone"]').click();
-  await controls(page, 'ascii');
+  await selectMode(page, 'halftone');
+  await controls(page, 'color');
   await expect(page.locator('#halftoneColor')).toHaveValue('duotone');
-  await expect(page.locator('#halftoneSize')).toHaveValue('16');
-  await expect(page.locator('#halftoneOffsetX')).toHaveValue('4');
+  await controls(page, 'style');
+  await expectRange(page, 'halftoneSize', '16');
+  await expectRange(page, 'halftoneOffsetX', '4');
   await closeControls(page);
-  await page.locator('[data-mode="pixel-art"]').click();
-  await controls(page, 'ascii');
-  await expect(page.locator('#artColumns')).toHaveValue('32');
-  await expect(page.locator('#artColors')).toHaveValue('6');
+  await selectMode(page, 'pixel-art');
+  await controls(page, 'style');
+  await expectRange(page, 'artColumns', '32');
+  await controls(page, 'color');
+  await expectRange(page, 'artColors', '6');
   await closeControls(page);
   await ready(page);
 

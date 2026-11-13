@@ -10,35 +10,30 @@ const labels: Record<RenderMode, string> = {
   png2xp: 'png2xp',
 };
 export const modeChoices = modeOrder.map((value) => ({ value, label: labels[value] }));
-export type ToolSection = 'photo' | 'tone' | 'color' | 'ascii';
+export type ToolSection = 'photo' | 'style' | 'color' | 'tone';
 type Section = { id: ToolSection; title: string; label: string; drawerTitle: string };
-const commonSections: Section[] = [
-  { id: 'photo', title: '01 / Отправная точка', label: 'Фото', drawerTitle: 'Фото и пресеты' },
-  { id: 'tone', title: '02 / Холст и тон', label: 'Тон', drawerTitle: 'Холст и тон' },
-  { id: 'color', title: '03 / Цвет и дизеринг', label: 'Цвет', drawerTitle: 'Цвет и дизеринг' },
-];
-const symbolSections: Section[] = [
-  ...commonSections,
-  { id: 'ascii', title: '04 / Символы', label: 'ASCII', drawerTitle: 'Символы и фон' },
-];
-const artSections: Section[] = [
-  ...commonSections,
-  { id: 'ascii', title: '04 / Настройки режима', label: 'Режим', drawerTitle: 'Настройки режима' },
+const sections: Section[] = [
+  { id: 'photo', title: 'Фото', label: 'Фото', drawerTitle: 'Фото' },
+  { id: 'style', title: 'Стиль', label: 'Стиль', drawerTitle: 'Стиль' },
+  { id: 'color', title: 'Цвет', label: 'Цвет', drawerTitle: 'Цвет' },
+  { id: 'tone', title: 'Тон', label: 'Тон', drawerTitle: 'Тон' },
 ];
 
 /** Presentation is intentionally separate from which mathematical inputs are active. */
 export function modePresentation(mode: ActiveMode) {
   const controls =
-    mode.kind === 'cells'
-      ? 'cells'
-      : mode.kind === 'halftone' || mode.kind === 'pixel-art'
-        ? 'art'
-        : 'symbols';
+    mode.kind === 'pixels'
+      ? 'pixels'
+      : mode.kind === 'cells'
+        ? 'cells'
+        : mode.kind === 'halftone' || mode.kind === 'pixel-art'
+          ? 'art'
+          : 'symbols';
   return {
     controls,
     pixelGrid: mode.kind === 'pixels',
     blocks: mode.id === 'png2xp',
-    sections: controls === 'art' ? artSections : symbolSections,
+    sections,
   };
 }
 

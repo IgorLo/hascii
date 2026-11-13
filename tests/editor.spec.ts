@@ -3,16 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { Canvas } from '@napi-rs/canvas';
 import { expect, type Page, test } from '@playwright/test';
 
-async function closeTools(page: Page) {
-  const close = page.getByRole('button', { name: 'Показать результат', exact: true });
-  if (await close.isVisible()) await close.click();
-}
-
-async function tools(page: Page, section: string) {
-  await closeTools(page);
-  const trigger = page.locator(`[data-tool="${section}"]`);
-  if (await trigger.isVisible()) await trigger.click();
-}
+import { closeTools, expectRange, selectMode, setRange, tools } from './helpers/editor';
 
 async function preview(page: Page, value: string) {
   await closeTools(page);
@@ -54,32 +45,32 @@ async function expectThemedScrollbars(page: Page) {
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#export')).toBeEnabled({ timeout: 20000 });
-  await page.locator('[data-mode="pixels"]').click();
+  await selectMode(page, 'pixels');
 });
 
 test('cell-fill overlay keeps ASCII unchanged at zero and locks the pixel grid', async ({
   page,
 }) => {
-  await page.locator('[data-mode="ascii"]').click();
+  await selectMode(page, 'ascii');
   await expect(page.locator('#export')).toBeEnabled();
   const original = await page
     .locator('#result')
     .evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
-  await page.locator('[data-mode="overlay"]').click();
+  await selectMode(page, 'overlay');
   await tools(page, 'tone');
-  await expect(page.locator('#pixelSize')).toBeDisabled();
-  await expect(page.locator('#pixelate')).toBeDisabled();
-  await tools(page, 'ascii');
-  await expect(page.locator('#blur')).toBeDisabled();
-  await page.locator('#overlayFill').fill('0');
+  await expect(page.locator('#pixelSize')).toHaveCount(0);
+  await expect(page.locator('#pixelate')).toHaveCount(0);
+  await tools(page, 'style');
+  await expect(page.locator('#blur')).toHaveCount(0);
+  await setRange(page, 'overlayFill', '0');
   await closeTools(page);
   await expect(page.locator('#export')).toBeEnabled();
   expect(
     (await page.locator('#result').evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())) ===
       original,
   ).toBe(true);
-  await tools(page, 'ascii');
-  await page.locator('#overlayFill').fill('0.35');
+  await tools(page, 'style');
+  await setRange(page, 'overlayFill', '0.35');
   await closeTools(page);
   await expect(page.locator('#export')).toBeEnabled();
   expect(
@@ -97,11 +88,11 @@ test('PICO-8 two-color modes expose their controls and export real PNGs', async 
     .click();
   await closeTools(page);
   for (const mode of ['ascii-fx', 'png2xp']) {
-    await page.locator(`[data-mode="${mode}"]`).click();
+    await selectMode(page, mode);
     await expect(page.locator('#export')).toBeEnabled();
-    await tools(page, 'ascii');
-    await page.locator('#cellSize').fill('12');
-    await page.locator('#cellAspect').fill('1.5');
+    await tools(page, 'style');
+    await setRange(page, 'cellSize', '12');
+    await setRange(page, 'cellAspect', '1.5');
     if (mode === 'ascii-fx') {
       await page.locator('#allowEmpty').uncheck();
       await page.locator('#chars').fill('');
@@ -128,6 +119,8 @@ test('PICO-8 two-color modes expose their controls and export real PNGs', async 
 
 test('desktop settings scroll with the themed six-pixel gutter', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'Desktop settings sidebar.');
+  await selectMode(page, 'ascii');
+  await tools(page, 'style');
   const sidebar = page.getByRole('complementary', { name: 'Настройки изображения' });
   const width = await sidebar.evaluate((el) => getComputedStyle(el, '::-webkit-scrollbar').width);
   expect(width).toBe('6px');
@@ -141,10 +134,12 @@ test('desktop settings collapse independently and preserve edited values', async
   page,
 }, info) => {
   test.skip(info.project.name !== 'desktop', 'Desktop accordion; mobile uses section drawers.');
-  const tone = page.getByRole('button', { name: '02 / Холст и тон', exact: true });
-  const color = page.getByRole('button', { name: '03 / Цвет и дизеринг', exact: true });
-  await expect(tone).toHaveAttribute('aria-expanded', 'true');
-  await page.locator('#brightness').fill('25');
+  const tone = page.getByRole('button', { name: 'Тон', exact: true });
+  const color = page.getByRole('button', { name: 'Цвет', exact: true });
+  await expect(tone).toHaveAttribute('aria-expanded', 'false');
+  await tone.click();
+  await color.click();
+  await setRange(page, 'brightness', '25');
   await tone.click();
   await expect(tone).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#brightness')).toBeHidden();
@@ -154,7 +149,7 @@ test('desktop settings collapse independently and preserve edited values', async
   await tone.focus();
   await page.keyboard.press('Enter');
   await expect(tone).toBeFocused();
-  await expect(page.locator('#brightness')).toHaveValue('25');
+  await expectRange(page, 'brightness', '25');
   await expect(color).toHaveAttribute('aria-expanded', 'false');
   await page.keyboard.press('Space');
   await expect(page.locator('#brightness')).toBeHidden();
@@ -169,12 +164,12 @@ test('all rendering modes, presets and preview layouts work', async ({ page }) =
   page.on('pageerror', (error) => errors.push(error.message));
   await expect(page).toHaveTitle('HASCII');
   for (const mode of ['ascii', 'overlay', 'pixels']) {
-    await page.locator(`[data-mode="${mode}"]`).click();
+    await selectMode(page, mode);
     await expect(page.locator('#export')).toBeEnabled();
     await expect(page.locator('#error')).toBeEmpty();
     await expect(page.locator('#outputInfo')).toHaveText('720 × 900');
   }
-  await tools(page, 'photo');
+  await tools(page, 'style');
   for (const preset of ['ascii', 'soft', 'gameboy', 'neon']) {
     await page.locator(`[data-preset="${preset}"]`).click();
     await expect(page.locator('#export')).toBeEnabled();
@@ -182,8 +177,8 @@ test('all rendering modes, presets and preview layouts work', async ({ page }) =
     if (preset === 'soft') {
       await tools(page, 'color');
       await expect(page.locator('#dither')).toHaveValue('bayer');
-      await expect(page.locator('#strength')).toHaveValue('0.65');
-      await tools(page, 'photo');
+      await expectRange(page, 'strength', '0.65');
+      await tools(page, 'style');
     }
   }
   await preview(page, 'result');
@@ -194,10 +189,10 @@ test('all rendering modes, presets and preview layouts work', async ({ page }) =
 });
 
 test('settings, empty-alphabet recovery and persistence', async ({ page }) => {
-  await page.locator('[data-mode="ascii"]').click();
+  await selectMode(page, 'ascii');
   await tools(page, 'tone');
-  await expect(page.locator('#pixelSize')).toBeDisabled();
-  await tools(page, 'ascii');
+  await expect(page.locator('#pixelSize')).toHaveCount(0);
+  await tools(page, 'style');
   await page.locator('#allowEmpty').uncheck();
   await page.locator('#chars').fill('');
   await expect(page.locator('#error')).toContainText('Добавьте хотя бы один символ');
@@ -205,21 +200,21 @@ test('settings, empty-alphabet recovery and persistence', async ({ page }) => {
   await page.locator('#chars').fill('+#@');
   await expect(page.locator('#export')).toBeEnabled();
   await page.locator('#matching').selectOption('shape');
-  await expect(page.locator('#shapeWeight')).toBeEnabled();
-  await tools(page, 'tone');
+  await expectRange(page, 'shapeWeight', '0.45');
+  await tools(page, 'photo');
   await page.locator('#resolution').selectOption('600');
   await closeTools(page);
   await expect(page.locator('#outputInfo')).toHaveText('480 × 600');
-  await page.locator('[data-mode="overlay"]').click();
+  await selectMode(page, 'overlay');
   await tools(page, 'tone');
-  await expect(page.locator('#pixelSize')).toBeDisabled();
-  await tools(page, 'ascii');
-  await page.locator('#overlayFill').fill('0');
-  await page.locator('#opacity').fill('1');
+  await expect(page.locator('#pixelSize')).toHaveCount(0);
+  await tools(page, 'style');
+  await setRange(page, 'overlayFill', '0');
+  await setRange(page, 'opacity', '1');
   await expect(page.locator('#export')).toBeEnabled();
   await page.reload();
-  await page.locator('[data-mode="ascii"]').click();
-  await tools(page, 'ascii');
+  await selectMode(page, 'ascii');
+  await tools(page, 'style');
   await expect(page.locator('#chars')).toHaveValue('+#@');
 });
 
@@ -235,7 +230,7 @@ test('imports and persists a palette and recovers from import errors', async ({ 
   await expect(page.locator('#importStatus')).toContainText('Добавлена');
   await expect(page.locator('#palette')).toContainText('Test Palette');
   await page.reload();
-  await page.locator('[data-mode="pixels"]').click();
+  await selectMode(page, 'pixels');
   await tools(page, 'color');
   await page.locator('#palette').click();
   await expect(
@@ -360,7 +355,7 @@ test('mobile preview, tools and focus fit narrow screens', async ({ page }) => {
     await expect(page.locator('#result')).toBeInViewport();
     await expect(page.locator('#original')).toBeHidden();
     await expectThemedScrollbars(page);
-    for (const section of ['photo', 'tone', 'color', 'ascii']) {
+    for (const section of ['photo', 'style', 'color', 'tone'] as const) {
       await tools(page, section);
       await expect(page.getByRole('dialog')).toBeVisible();
       const overflow = await page.evaluate(() => {
@@ -368,10 +363,12 @@ test('mobile preview, tools and focus fit narrow screens', async ({ page }) => {
         const elements = [
           document.documentElement,
           dialog,
-          ...dialog.querySelectorAll('input,select,textarea,button'),
+          ...dialog.querySelectorAll('input,select,textarea,button,.mode-viewport'),
         ];
         return elements
           .filter((element) => {
+            // Mode buttons scroll inside their bounded strip; its edges are checked instead.
+            if (element.matches('[data-mode]')) return false;
             const rect = element.getBoundingClientRect();
             return rect.width && (rect.right > innerWidth + 1 || rect.left < -1);
           })

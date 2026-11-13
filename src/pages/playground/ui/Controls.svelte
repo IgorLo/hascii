@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import {
     Accordion,
     Button,
@@ -8,7 +9,6 @@
     Link,
     Panel,
     Select,
-    Slider,
     Textarea,
   } from 'svelte-ascii-ui';
 
@@ -16,61 +16,52 @@
 
   import type { EditorModel } from '../model/editor.svelte';
   import { modePresentation, type ToolSection } from '../model/mode-presentation';
-  import { baseline, characterSets, presets, ranges } from '../model/settings';
+  import { baseline, characterSets, presets, type ranges } from '../model/settings';
   import ArtControls from './ArtControls.svelte';
+  import ModePicker from './ModePicker.svelte';
   import PalettePicker from './PalettePicker.svelte';
+  import ParameterRange from './ParameterRange.svelte';
 
-  let { editor, section = 'all' }: { editor: EditorModel; section?: 'all' | ToolSection } =
-    $props();
+  let {
+    editor,
+    section = 'all',
+    mobile = false,
+    onedit,
+    upload,
+    showModePicker = true,
+  }: {
+    editor: EditorModel;
+    section?: 'all' | ToolSection;
+    mobile?: boolean;
+    onedit?: (key: keyof typeof ranges) => void;
+    upload?: Snippet;
+    showModePicker?: boolean;
+  } = $props();
   let paletteUrl = $state('');
   const palette = $derived(editor.palettes.find((p) => p.id === editor.settings.palette)!);
   const charCount = $derived(new Set(Array.from(editor.settings.chars)).size);
-  const active = $derived(selectMode(editor.settings));
-  const presentation = $derived(modePresentation(active));
+  const presentation = $derived(modePresentation(selectMode(editor.settings)));
   const twoColor = $derived(presentation.controls === 'cells');
-  const pixelGrid = $derived(presentation.pixelGrid);
   const artMode = $derived(presentation.controls === 'art');
   const groups = $derived(presentation.sections);
-  let expanded = $state<string | string[]>(['photo', 'tone', 'color', 'ascii']);
+  let expanded = $state<string | string[]>(['photo', 'style']);
   type StringSetting = {
     [K in keyof Settings]: Settings[K] extends string ? K : never;
   }[keyof Settings];
 </script>
 
-{#snippet range(key: keyof typeof ranges, disabled = false)}
-  {@const config = ranges[key]}
-  <Field
-    id={key}
-    label={`${key === 'backgroundOpacity' && twoColor ? 'Непрозрачность фона ячеек' : config.label} · ${editor.settings[key]}`}
-  >
-    {#snippet children(control)}
-      <Slider
-        {...control}
-        size="s"
-        min={config.min}
-        max={config.max}
-        step={config.step}
-        {disabled}
-        bind:value={() => editor.settings[key], (value) => editor.update(key, value)}
-      />
-    {/snippet}
-  </Field>
+{#snippet range(setting: keyof typeof ranges, label?: string)}
+  <ParameterRange {editor} {setting} compact={mobile} {onedit} {label} />
 {/snippet}
 
-{#snippet select(
-  key: StringSetting,
-  label: string,
-  options: { value: string; label: string }[],
-  disabled = false,
-)}
+{#snippet select(key: StringSetting, label: string, options: { value: string; label: string }[])}
   <Field id={key} {label}>
     {#snippet children(control)}
       <Select
-        showPlaceholder={false}
         {...control}
         size="s"
+        showPlaceholder={false}
         {options}
-        {disabled}
         bind:value={
           () => editor.settings[key],
           (value) => {
@@ -83,17 +74,8 @@
 {/snippet}
 
 {#snippet photo()}
-  <div class="button-grid">
-    {#each presets as preset (preset.value)}
-      <Button size="s" data-preset={preset.value} onclick={() => editor.preset(preset.value)}
-        >{preset.label}</Button
-      >
-    {/each}
-  </div>
-{/snippet}
-
-{#snippet tone()}
   <div class="control-stack">
+    {@render upload?.()}
     <Field
       id="resolution"
       label="Рабочее разрешение"
@@ -101,9 +83,9 @@
     >
       {#snippet children(control)}
         <Select
-          showPlaceholder={false}
           {...control}
           size="s"
+          showPlaceholder={false}
           options={[600, 900, 1200, 1600].map((value) => ({
             value: String(value),
             label: `${value} px`,
@@ -117,44 +99,28 @@
         />
       {/snippet}
     </Field>
+  </div>
+{/snippet}
+
+{#snippet tone()}
+  <div class="control-stack">
     <Checkbox
       id="correction"
       size="s"
       label="Коррекция изображения"
       bind:checked={() => editor.settings.correction, (value) => editor.update('correction', value)}
     />
-    {@render range('brightness', !editor.settings.correction)}
-    {@render range('contrast', !editor.settings.correction)}
-    {@render range('saturation', !editor.settings.correction)}
-    {#if !artMode}
-      <Checkbox
-        id="pixelate"
-        size="s"
-        label="Пикселизация"
-        disabled={!pixelGrid}
-        bind:checked={() => editor.settings.pixelate, (value) => editor.update('pixelate', value)}
-      />
-      {@render range('pixelSize', !editor.settings.pixelate || !pixelGrid)}
+    {#if editor.settings.correction}
+      {@render range('brightness')}
+      {@render range('contrast')}
+      {@render range('saturation')}
     {/if}
-    <p class="hint">
-      {artMode
-        ? 'Параметры растра и пиксельной сетки находятся в настройках режима.'
-        : editor.settings.mode === 'overlay'
-          ? 'Фон повторяет сетку ASCII. Размер символа и интервалы управляют всей ячейкой; отдельного размера пикселя здесь нет.'
-          : !pixelGrid
-            ? 'Размер ячейки задаётся в разделе «Символы». Пикселизация фона здесь не применяется.'
-            : 'Размер пикселя меняет цветные блоки фона. ASCII имеет отдельную сетку.'}
-    </p>
   </div>
 {/snippet}
 
 {#snippet color()}
   {#if artMode}
-    <p class="hint">
-      {editor.settings.mode === 'halftone'
-        ? 'В этом режиме цвета задаются красками и бумагой в настройках Halftone. Палитра Lospec и отдельный дизеринг не применяются.'
-        : 'Pixel Art подбирает свою палитру вместе с деталями изображения. Число цветов задаётся в настройках режима; отдельный дизеринг не применяется.'}
-    </p>
+    <ArtControls {editor} section="color" {mobile} {onedit} />
   {:else}
     <div class="control-stack">
       <Checkbox
@@ -165,191 +131,214 @@
           () => editor.settings.paletteEnabled, (value) => editor.update('paletteEnabled', value)
         }
       />
-      <PalettePicker
-        palettes={editor.palettes}
-        value={editor.settings.palette}
-        onchange={(value) => editor.update('palette', value)}
-      />
-      <p class="hint">
-        {palette.colors.length} цветов · {palette.author}
-        {#if palette.url}<Link
-            size="inherit"
-            href={palette.url}
-            target="_blank"
-            rel="noopener noreferrer">Lospec ↗</Link
-          >{/if}
-      </p>
-      <form
-        class="import-form"
-        onsubmit={(event) => {
-          event.preventDefault();
-          void editor.importPalette(paletteUrl);
-        }}
-      >
-        <Field id="paletteUrl" label="Ссылка или имя палитры Lospec">
-          {#snippet children(control)}<Input
-              {...control}
-              size="s"
-              bind:value={paletteUrl}
-              placeholder="Lospec: ссылка или sweetie-16"
-            />{/snippet}
-        </Field>
-        <Button id="import" type="submit" size="s" loading={editor.importing}
-          >Импортировать палитру</Button
-        >
-      </form>
+      {#if editor.settings.paletteEnabled}
+        <PalettePicker
+          palettes={editor.palettes}
+          value={editor.settings.palette}
+          onchange={(value) => editor.update('palette', value)}
+        />
+        <p class="hint">
+          {palette.colors.length} цветов · {palette.author}
+          {#if palette.url}<Link
+              size="inherit"
+              href={palette.url}
+              target="_blank"
+              rel="noopener noreferrer">Lospec ↗</Link
+            >{/if}
+        </p>
+        <details data-details="dither">
+          <summary>Дизеринг</summary>
+          <div class="details-content">
+            {@render select('dither', 'Алгоритм дизеринга', [
+              { value: 'none', label: 'Выключен' },
+              { value: 'bayer', label: 'Bayer · регулярный 4×4' },
+              { value: 'floyd', label: 'Floyd–Steinberg · зерно' },
+              { value: 'atkinson', label: 'Atkinson · разреженный' },
+              { value: 'blue-noise', label: 'Blue noise · нерегулярный' },
+            ])}
+            {#if editor.settings.dither !== 'none'}{@render range('strength')}{/if}
+          </div>
+        </details>
+        <details data-details="import">
+          <summary>Импорт палитры Lospec</summary>
+          <form
+            class="import-form details-content"
+            onsubmit={(event) => {
+              event.preventDefault();
+              void editor.importPalette(paletteUrl);
+            }}
+          >
+            <Field
+              id="paletteUrl"
+              label="Ссылка или имя палитры Lospec"
+              hint="Например: sweetie-16 или https://lospec.com/palette-list/sweetie-16"
+            >
+              {#snippet children(control)}<Input
+                  {...control}
+                  size="s"
+                  bind:value={paletteUrl}
+                />{/snippet}
+            </Field>
+            <Button id="import" type="submit" size="s" loading={editor.importing}
+              >Импортировать палитру</Button
+            >
+          </form>
+        </details>
+      {/if}
       <p id="importStatus" class="hint" role="status">{editor.importStatus}</p>
-      {@render select(
-        'dither',
-        'Дизеринг',
-        [
-          { value: 'none', label: 'Выключен' },
-          { value: 'bayer', label: 'Bayer · регулярный 4×4' },
-          { value: 'floyd', label: 'Floyd–Steinberg · зерно' },
-          { value: 'atkinson', label: 'Atkinson · разреженный' },
-          { value: 'blue-noise', label: 'Blue noise · нерегулярный' },
-        ],
-        !editor.settings.paletteEnabled,
-      )}
-      {@render range(
-        'strength',
-        !editor.settings.paletteEnabled || editor.settings.dither === 'none',
-      )}
     </div>
   {/if}
 {/snippet}
 
-{#snippet ascii()}
-  <div class="control-stack">
-    {#if twoColor}
-      <p class="hint">
-        {editor.settings.mode === 'ascii-fx'
-          ? 'ASCII FX подбирает форму символа и два цвета на ячейку. Палитра применяется после подбора; на малом числе цветов часть деталей может пропасть.'
-          : 'png2xp подбирает полублоки и штриховку с двумя цветами из палитры. Это адаптация алгоритма Asciicker для фотографий.'}
-      </p>
-      {@render range('cellSize')}{@render range('cellAspect')}
-      <p class="hint">1 — квадратные ячейки, 2 — вытянутые по вертикали.</p>
-    {:else}
-      <p class="hint">
-        {editor.settings.mode === 'overlay'
-          ? 'Эксперимент: тот же ASCII, но ячейки залиты цветом своих символов. Приглушённая заливка заполняет промежутки, а символы остаются поверх.'
-          : 'Настройки применяются в режимах ASCII и «Фон + ASCII».'}
-      </p>
-    {/if}
-    {#if presentation.blocks}
-      <Checkbox
-        id="blockShading"
+{#snippet characters()}
+  {@render select('font', 'Шрифт', [
+    { value: 'Consolas, monospace', label: 'Consolas' },
+    { value: "'Courier New', monospace", label: 'Courier New' },
+    { value: "'Lucida Console', monospace", label: 'Lucida Console' },
+  ])}
+  {@render range('gapX')}{@render range('gapY')}
+  <span>Добавить набор</span>
+  <div class="button-grid">
+    {#each Object.entries(characterSets) as [name, chars] (name)}
+      <Button
         size="s"
-        label="Штриховка ░ ▒"
-        bind:checked={
-          () => editor.settings.blockShading, (value) => editor.update('blockShading', value)
-        }
-      />
-      <p class="hint">
-        Без штриховки остаются сплошные ячейки и полублоки ▄ ▌. Шрифт и библиотека букв в этом
-        режиме не используются.
-      </p>
-    {:else}
-      {#if !twoColor}
-        {@render select('matching', 'Подбор', [
-          { value: 'tone', label: 'По яркости' },
-          { value: 'shape', label: 'По яркости и форме' },
-        ])}
-        {@render range('shapeWeight', editor.settings.matching !== 'shape')}
+        onclick={() =>
+          editor.update(
+            'chars',
+            Array.from(new Set(Array.from(editor.settings.chars + chars))).join(''),
+          )}>{name}</Button
+      >
+    {/each}
+  </div>
+  <Checkbox
+    id="allowEmpty"
+    size="s"
+    label="Разрешать пустые ячейки"
+    bind:checked={() => editor.settings.allowEmpty, (value) => editor.update('allowEmpty', value)}
+  />
+  {#if editor.settings.allowEmpty}
+    {@render range('emptyThreshold')}
+    <p class="hint">
+      Чем выше порог, тем больше ровных участков заменяется цветными ячейками без символов. 0 — без
+      заливки, пробел только участвует в подборе.
+    </p>
+  {/if}
+  <Field
+    id="chars"
+    label={`Твой набор символов (${charCount})`}
+    hint="До 512 уникальных символов. Отображение Unicode зависит от шрифта; цветные emoji не рассчитаны на точное сопоставление."
+  >
+    {#snippet children(control)}<Textarea
+        class="aui-scrollbar"
+        {...control}
+        size="s"
+        rows={4}
+        spellcheck={false}
+        bind:value={() => editor.settings.chars, (value) => editor.update('chars', value)}
+      />{/snippet}
+  </Field>
+  <div class="button-row">
+    <Button id="clearChars" size="s" onclick={() => editor.update('chars', '')}>Очистить</Button>
+    <Button id="oneChar" size="s" onclick={() => editor.update('chars', '+')}>Только +</Button>
+    <Button id="defaultChars" size="s" onclick={() => editor.update('chars', baseline)}
+      >Базовый набор</Button
+    >
+  </div>
+{/snippet}
+
+{#snippet symbolStyle()}
+  {#if twoColor}
+    {@render range('cellSize')}{@render range('cellAspect')}
+    <p class="hint">1 — квадратные ячейки, 2 — вытянутые по вертикали.</p>
+  {:else}
+    {@render range('fontSize')}
+    {#if editor.settings.mode === 'overlay'}
+      {@render range('overlayFill')}
+      <p class="hint">Цветная подложка заполняет ячейки. При 100% символ сливается с заливкой.</p>
+    {/if}
+  {/if}
+  {#if presentation.blocks}
+    <Checkbox
+      id="blockShading"
+      size="s"
+      label="Штриховка ░ ▒"
+      bind:checked={
+        () => editor.settings.blockShading, (value) => editor.update('blockShading', value)
+      }
+    />
+    <p class="hint">Без штриховки остаются сплошные ячейки и полублоки ▄ ▌.</p>
+  {/if}
+  <details data-details="style">
+    <summary>{presentation.blocks ? 'Фон и непрозрачность' : 'Символы, интервалы и фон'}</summary>
+    <div class="details-content">
+      {#if !presentation.blocks}
+        {#if !twoColor}
+          {@render select('matching', 'Подбор', [
+            { value: 'tone', label: 'По яркости' },
+            { value: 'shape', label: 'По яркости и форме' },
+          ])}
+          {#if editor.settings.matching === 'shape'}{@render range('shapeWeight')}{/if}
+        {/if}
+        {@render characters()}
       {/if}
-      {@render select('font', 'Шрифт', [
-        { value: 'Consolas, monospace', label: 'Consolas' },
-        { value: "'Courier New', monospace", label: 'Courier New' },
-        { value: "'Lucida Console', monospace", label: 'Lucida Console' },
+      {@render select('background', 'Однотонный фон', [
+        { value: '#0c061b', label: 'Чернильный' },
+        { value: '#000000', label: 'Чёрный' },
+        { value: '#ffffff', label: 'Белый' },
+        { value: '#eee9de', label: 'Бумага' },
       ])}
-      {#if !twoColor}{@render range('fontSize')}{/if}
-      {@render range('gapX')}{@render range('gapY')}
-      <span>Добавить набор</span>
+      {#if twoColor}{@render range('backgroundOpacity', 'Непрозрачность фона ячеек')}{/if}
+      {@render range('opacity')}
+    </div>
+  </details>
+{/snippet}
+
+{#snippet style()}
+  <div class="control-stack">
+    {#if showModePicker}
+      <ModePicker value={editor.settings.mode} onchange={(mode) => editor.update('mode', mode)} />
+    {/if}
+    <div class="preset-stack">
+      <span>Пресеты</span>
       <div class="button-grid">
-        {#each Object.entries(characterSets) as [name, chars] (name)}
-          <Button
-            size="s"
-            onclick={() =>
-              editor.update(
-                'chars',
-                Array.from(new Set(Array.from(editor.settings.chars + chars))).join(''),
-              )}>{name}</Button
+        {#each presets as preset (preset.value)}
+          <Button size="s" data-preset={preset.value} onclick={() => editor.preset(preset.value)}
+            >{preset.label}</Button
           >
         {/each}
       </div>
+    </div>
+    {#if artMode}
+      <ArtControls {editor} section="style" {mobile} {onedit} />
+    {:else if presentation.controls === 'pixels'}
       <Checkbox
-        id="allowEmpty"
+        id="pixelate"
         size="s"
-        label="Разрешать пустые ячейки"
-        bind:checked={
-          () => editor.settings.allowEmpty, (value) => editor.update('allowEmpty', value)
-        }
+        label="Пикселизация"
+        bind:checked={() => editor.settings.pixelate, (value) => editor.update('pixelate', value)}
       />
-      {@render range('emptyThreshold', !editor.settings.allowEmpty)}
-      <p class="hint">
-        Чем выше порог, тем больше ровных участков заменяется сплошными цветными ячейками без
-        символов. Цвет берётся из палитры, а если она выключена — из изображения. 0 — без заливки,
-        пробел только участвует в подборе. Снятая галочка отключает заливку и исключает пустые
-        знаки.
-      </p>
-      <Field
-        id="chars"
-        label={`Твой набор символов (${charCount})`}
-        hint="До 512 уникальных символов. Отображение Unicode зависит от шрифта; цветные emoji не рассчитаны на точное сопоставление."
-      >
-        {#snippet children(control)}<Textarea
-            class="aui-scrollbar"
-            {...control}
-            size="s"
-            rows={4}
-            spellcheck={false}
-            bind:value={() => editor.settings.chars, (value) => editor.update('chars', value)}
-          />{/snippet}
-      </Field>
-      <div class="button-row">
-        <Button id="clearChars" size="s" onclick={() => editor.update('chars', '')}>Очистить</Button
-        >
-        <Button id="oneChar" size="s" onclick={() => editor.update('chars', '+')}>Только +</Button>
-        <Button id="defaultChars" size="s" onclick={() => editor.update('chars', baseline)}
-          >Базовый набор</Button
-        >
-      </div>
-    {/if}
-    {@render select('background', 'Однотонный фон', [
-      { value: '#0c061b', label: 'Чернильный' },
-      { value: '#000000', label: 'Чёрный' },
-      { value: '#ffffff', label: 'Белый' },
-      { value: '#eee9de', label: 'Бумага' },
-    ])}
-    {#if !twoColor}{@render range('blur', true)}{/if}
-    {#if editor.settings.mode === 'overlay'}
-      {@render range('overlayFill')}
-      <p class="hint">
-        0 — исходный ASCII, 30% — лёгкая цветная подложка. При 100% цвет заливки совпадает с
-        символом, и он сливается с фоном. Ровные участки сохраняются как в обычном ASCII.
-      </p>
+      {#if editor.settings.pixelate}{@render range('pixelSize')}{/if}
     {:else}
-      {@render range('backgroundOpacity', !twoColor)}
+      {@render symbolStyle()}
     {/if}
-    {@render range('opacity')}
   </div>
 {/snippet}
 
 {#snippet content(id: string)}
   {#if id === 'photo'}
     {@render photo()}
-  {:else if id === 'tone'}
-    {@render tone()}
+  {:else if id === 'style'}
+    {@render style()}
   {:else if id === 'color'}
     {@render color()}
-  {:else if id === 'ascii'}
-    {#if artMode}<ArtControls {editor} />{:else}{@render ascii()}{/if}
+  {:else if id === 'tone'}
+    {@render tone()}
   {/if}
 {/snippet}
 
 {#if section === 'all'}
   {#each groups as group (group.id)}
-    <Panel size="s">
+    <Panel size="s" aria-label={group.title} data-section={group.id}>
       <Accordion items={[group]} multiple bind:value={expanded} size="s" headingLevel={2}>
         {#snippet header(item)}<strong>{item.title}</strong>{/snippet}
         {#snippet children(item)}
@@ -358,8 +347,15 @@
       </Accordion>
     </Panel>
   {/each}
+{:else if mobile}
+  {@render content(section)}
 {:else}
-  <Panel title={groups.find((group) => group.id === section)!.title} size="s">
+  <Panel
+    title={groups.find((group) => group.id === section)!.title}
+    aria-label={groups.find((group) => group.id === section)!.title}
+    data-section={section}
+    size="s"
+  >
     {@render content(section)}
   </Panel>
 {/if}
@@ -371,11 +367,31 @@
     margin-top: 12px;
   }
   .control-stack,
-  .import-form {
+  .import-form,
+  .details-content,
+  .preset-stack {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     min-width: 0;
     gap: 12px;
+  }
+  .preset-stack {
+    gap: 8px;
+  }
+  .details-content {
+    padding-block: 12px 4px;
+  }
+  summary {
+    display: list-item;
+    min-block-size: 44px;
+    padding-block: 12px;
+    color: var(--text);
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+  summary:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
   }
   .button-grid {
     display: grid;

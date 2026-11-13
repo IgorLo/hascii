@@ -1,11 +1,6 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-async function tools(page: Page, section: string) {
-  const close = page.getByRole('button', { name: 'Показать результат', exact: true });
-  if (await close.isVisible()) await close.click();
-  const trigger = page.locator(`[data-tool="${section}"]`);
-  if (await trigger.isVisible()) await trigger.click();
-}
+import { closeTools, expectRange, selectMode, tools } from './helpers/editor';
 
 test('fresh editor uses the requested defaults and mode order', async ({ page }) => {
   await page.goto('/');
@@ -21,28 +16,24 @@ test('fresh editor uses the requested defaults and mode order', async ({ page })
   ]);
   await expect(page.locator('[data-mode="pixel-art"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#recipe')).toContainText('Pixel Art');
-  await page.locator('[data-mode="pixels"]').click();
+  await selectMode(page, 'pixels');
   await expect(page.locator('#recipe')).toContainText('PICO-8');
   await tools(page, 'color');
   await expect(page.locator('#dither')).toHaveValue('atkinson');
-  await expect(page.locator('#strength')).toHaveValue('0.1');
-  await tools(page, 'photo');
-  const close = page.getByRole('button', { name: 'Показать результат', exact: true });
-  if (await close.isVisible()) await close.click();
-  await page.locator('[data-mode="halftone"]').click();
-  await tools(page, 'ascii');
+  await expectRange(page, 'strength', '0.1');
+  await closeTools(page);
+  await selectMode(page, 'halftone');
+  await tools(page, 'color');
   await expect(page.locator('#halftoneColor')).toHaveValue('mono');
-  await tools(page, 'photo');
-  if (await close.isVisible()) await close.click();
-  await page.locator('[data-mode="ascii"]').click();
-  await tools(page, 'ascii');
-  await expect(page.locator('#emptyThreshold')).toHaveValue('0');
-  await tools(page, 'photo');
-  if (await close.isVisible()) await close.click();
-  await page.locator('[data-mode="overlay"]').click();
-  await tools(page, 'ascii');
-  await expect(page.locator('#emptyThreshold')).toHaveValue('0');
-  await expect(page.locator('#overlayFill')).toHaveValue('0.8');
+  await closeTools(page);
+  await selectMode(page, 'ascii');
+  await tools(page, 'style');
+  await expectRange(page, 'emptyThreshold', '0');
+  await closeTools(page);
+  await selectMode(page, 'overlay');
+  await tools(page, 'style');
+  await expectRange(page, 'emptyThreshold', '0');
+  await expectRange(page, 'overlayFill', '0.8');
   await expect(page.locator('#export')).toBeEnabled();
 });
 
@@ -53,7 +44,7 @@ test('palette picker previews built-ins and large imports, supports keyboard and
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await expect(page.locator('#export')).toBeEnabled({ timeout: 20000 });
-  await page.locator('[data-mode="pixels"]').click();
+  await selectMode(page, 'pixels');
   await tools(page, 'color');
   const trigger = page.getByRole('button', { name: /^Палитра: PICO-8/ });
   await trigger.click();
@@ -112,7 +103,7 @@ test('palette picker previews built-ins and large imports, supports keyboard and
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
   await page.keyboard.press('Escape');
   await page.reload();
-  await page.locator('[data-mode="pixels"]').click();
+  await selectMode(page, 'pixels');
   await tools(page, 'color');
   await page.locator('#palette').click();
   await expect(
@@ -134,7 +125,7 @@ test('palette picker previews built-ins and large imports, supports keyboard and
 test('palette rows place a short color preview beside the name and count', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#export')).toBeEnabled({ timeout: 20000 });
-  await page.locator('[data-mode="pixels"]').click();
+  await selectMode(page, 'pixels');
   await tools(page, 'color');
   await expect(page.locator('#palette')).toContainText(/PICO-8\s*·\s*16/);
   const trigger = await page.locator('#palette').boundingBox();
