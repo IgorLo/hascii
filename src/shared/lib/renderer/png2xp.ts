@@ -2,8 +2,8 @@
 // 8ff75d0c5a8d2745a8ad6a8a841dd31a46e81635. See static/licenses/asciicker.txt.
 // Differences: arbitrary palettes, browser-local sampling, adjustable cell geometry,
 // row-major error diffusion and optional Bayer/Floyd in addition to Atkinson.
-import { blueNoiseThreshold } from './blue-noise';
-import { bayer, clamp } from './color';
+import { clamp } from './color';
+import { bayer, createDither } from './dither';
 import type { RGB, Settings } from './types';
 
 type Kind = 'solid' | 'horizontal' | 'vertical' | 'shade25' | 'shade50';
@@ -179,24 +179,20 @@ export function renderPng2xp(image: ImageData, s: Settings, palette: RGB[]) {
           ? encode(samples[i * 3 + k] / counts[i])
           : image.data[fallback + k];
     }
-  const kernel =
-    s.dither === 'floyd'
-      ? [
-          [1, 0, 7 / 16],
-          [-1, 1, 3 / 16],
-          [0, 1, 5 / 16],
-          [1, 1, 1 / 16],
-        ]
-      : s.dither === 'atkinson'
-        ? [
-            [1, 0, 1 / 8],
-            [2, 0, 1 / 8],
-            [-1, 1, 1 / 8],
-            [0, 1, 1 / 8],
-            [1, 1, 1 / 8],
-            [0, 2, 1 / 8],
-          ]
-        : [];
+  const policy = createDither({
+    algorithm: palette.length ? s.dither : 'none',
+    strength: s.strength,
+    width: columns,
+    height: rows,
+    addError: (x, y, red, green, blue) => {
+      for (let q = 0; q < 4; q++) {
+        const i = ((y * 2 + (q >> 1)) * sw + x * 2 + (q % 2)) * 3;
+        samples[i] += red;
+        samples[i + 1] += green;
+        samples[i + 2] += blue;
+      }
+    },
+  });
   const fit = fitter(palette, s.blockShading);
   // Rank native pixels instead of stretching a 4x4 mask. This preserves rounded
   // 25%/50% coverage even in 2x2 cells, tall cells and odd dimensions.
@@ -215,12 +211,7 @@ export function renderPng2xp(image: ImageData, s: Settings, palette: RGB[]) {
   const kinds = new Set<Kind>();
   for (let cy = 0; cy < rows; cy++)
     for (let cx = 0; cx < columns; cx++) {
-      const bias =
-        palette.length && s.dither === 'bayer'
-          ? ((bayer[(cy % 4) * 4 + (cx % 4)] + 0.5) / 16 - 0.5) * 255 * s.strength
-          : palette.length && s.dither === 'blue-noise'
-            ? (blueNoiseThreshold(cx, cy) - 0.5) * 255 * s.strength
-            : 0;
+      const bias = policy.biasAt(cx, cy);
       const four = [0, 1, 2, 3].map((q) => {
         const i = ((cy * 2 + (q >> 1)) * sw + cx * 2 + (q % 2)) * 3;
         return [0, 1, 2].map((k) => Math.round(clamp(samples[i + k] + bias))) as RGB;
@@ -228,16 +219,7 @@ export function renderPng2xp(image: ImageData, s: Settings, palette: RGB[]) {
       const cell = fit(four);
       kinds.add(cell.kind);
       const target = mean(four);
-      if (palette.length)
-        for (const [dx, dy, weight] of kernel) {
-          const nx = cx + dx,
-            ny = cy + dy;
-          if (nx < 0 || nx >= columns || ny >= rows) continue;
-          for (let q = 0; q < 4; q++)
-            for (let k = 0; k < 3; k++)
-              samples[((ny * 2 + (q >> 1)) * sw + nx * 2 + (q % 2)) * 3 + k] +=
-                (target[k] - cell.mean[k]) * weight * s.strength;
-        }
+      if (palette.length) policy.diffuse(cx, cy, target, cell.mean);
       const background = base.map((v, k) => v + (cell.background[k] - v) * s.backgroundOpacity);
       const foreground = background.map((v, k) => v + (cell.foreground[k] - v) * s.opacity);
       for (let py = 0; py < ch && cy * ch + py < image.height; py++)
