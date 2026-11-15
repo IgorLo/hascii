@@ -9,10 +9,14 @@
     palettes,
     value,
     onchange,
+    open = $bindable(false),
+    onopenchange,
   }: {
     palettes: Palette[];
     value: string;
     onchange: (id: string) => void;
+    open?: boolean;
+    onopenchange?: (open: boolean) => void;
   } = $props();
   const selected = $derived(palettes.find((palette) => palette.id === value)!);
 
@@ -54,6 +58,14 @@
       title="Выбор палитры"
       size="s"
       style="width: 100%"
+      bind:open={
+        () => open,
+        (value) => {
+          if (open === value) return;
+          open = value;
+          onopenchange?.(value);
+        }
+      }
     >
       {#snippet trigger()}
         {@render choice(selected, true)}

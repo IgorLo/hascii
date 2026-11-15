@@ -1,6 +1,13 @@
 import { expect, test } from '@playwright/test';
 
-import { closeTools, expectRange, selectMode, tools } from './helpers/editor';
+import {
+  closeImport,
+  closeTools,
+  expectRange,
+  openImport,
+  selectMode,
+  tools,
+} from './helpers/editor';
 
 test('fresh editor uses the requested defaults and mode order', async ({ page }) => {
   await page.goto('/');
@@ -88,8 +95,11 @@ test('palette picker previews built-ins and large imports, supports keyboard and
       },
     }),
   );
+  await openImport(page);
   await page.locator('#paletteUrl').fill('large-preview');
   await page.locator('#import').click();
+  await expect(page.locator('#importStatus')).toContainText('Добавлена');
+  await closeImport(page);
   await expect(page.locator('#palette')).toContainText(largeName);
   await expect(page.locator('#swatches [data-color]')).toHaveCount(1024);
   await page.locator('#palette').click();

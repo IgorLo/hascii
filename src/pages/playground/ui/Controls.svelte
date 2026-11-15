@@ -5,7 +5,6 @@
     Button,
     Checkbox,
     Field,
-    Input,
     Link,
     Panel,
     Select,
@@ -19,6 +18,7 @@
   import { baseline, characterSets, presets, type ranges } from '../model/settings';
   import ArtControls from './ArtControls.svelte';
   import ModePicker from './ModePicker.svelte';
+  import PaletteImport from './PaletteImport.svelte';
   import PalettePicker from './PalettePicker.svelte';
   import ParameterRange from './ParameterRange.svelte';
 
@@ -29,6 +29,10 @@
     onedit,
     upload,
     showModePicker = true,
+    onimport,
+    paletteOpen,
+    onpaletteopen,
+    detailsOpen = $bindable(false),
   }: {
     editor: EditorModel;
     section?: 'all' | ToolSection;
@@ -36,6 +40,10 @@
     onedit?: (key: keyof typeof ranges) => void;
     upload?: Snippet;
     showModePicker?: boolean;
+    onimport?: () => void;
+    paletteOpen?: boolean;
+    onpaletteopen?: (open: boolean) => void;
+    detailsOpen?: boolean;
   } = $props();
   let paletteUrl = $state('');
   const palette = $derived(editor.palettes.find((p) => p.id === editor.settings.palette)!);
@@ -51,7 +59,7 @@
 </script>
 
 {#snippet range(setting: keyof typeof ranges, label?: string)}
-  <ParameterRange {editor} {setting} compact={mobile} {onedit} {label} />
+  <ParameterRange {editor} {setting} compact={mobile} dense={mobile && !onedit} {onedit} {label} />
 {/snippet}
 
 {#snippet select(key: StringSetting, label: string, options: { value: string; label: string }[])}
@@ -136,6 +144,8 @@
           palettes={editor.palettes}
           value={editor.settings.palette}
           onchange={(value) => editor.update('palette', value)}
+          open={paletteOpen}
+          onopenchange={onpaletteopen}
         />
         <p class="hint">
           {palette.colors.length} цветов · {palette.author}
@@ -159,33 +169,18 @@
             {#if editor.settings.dither !== 'none'}{@render range('strength')}{/if}
           </div>
         </details>
-        <details data-details="import">
-          <summary>Импорт палитры Lospec</summary>
-          <form
-            class="import-form details-content"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void editor.importPalette(paletteUrl);
-            }}
-          >
-            <Field
-              id="paletteUrl"
-              label="Ссылка или имя палитры Lospec"
-              hint="Например: sweetie-16 или https://lospec.com/palette-list/sweetie-16"
-            >
-              {#snippet children(control)}<Input
-                  {...control}
-                  size="s"
-                  bind:value={paletteUrl}
-                />{/snippet}
-            </Field>
-            <Button id="import" type="submit" size="s" loading={editor.importing}
-              >Импортировать палитру</Button
-            >
-          </form>
-        </details>
+        {#if onimport}
+          <Button size="s" data-open-details="import" onclick={onimport}>Импорт палитры…</Button>
+        {:else}
+          <details data-details="import">
+            <summary>Импорт палитры Lospec</summary>
+            <div class="details-content">
+              <PaletteImport {editor} bind:value={paletteUrl} showStatus={false} />
+            </div>
+          </details>
+        {/if}
       {/if}
-      <p id="importStatus" class="hint" role="status">{editor.importStatus}</p>
+      {#if !onimport}<p id="importStatus" class="hint" role="status">{editor.importStatus}</p>{/if}
     </div>
   {/if}
 {/snippet}
@@ -268,7 +263,7 @@
     />
     <p class="hint">Без штриховки остаются сплошные ячейки и полублоки ▄ ▌.</p>
   {/if}
-  <details data-details="style">
+  <details data-details="style" bind:open={detailsOpen}>
     <summary>{presentation.blocks ? 'Фон и непрозрачность' : 'Символы, интервалы и фон'}</summary>
     <div class="details-content">
       {#if !presentation.blocks}
@@ -309,7 +304,7 @@
       </div>
     </div>
     {#if artMode}
-      <ArtControls {editor} section="style" {mobile} {onedit} />
+      <ArtControls {editor} section="style" {mobile} {onedit} bind:detailsOpen />
     {:else if presentation.controls === 'pixels'}
       <Checkbox
         id="pixelate"
@@ -367,7 +362,6 @@
     margin-top: 12px;
   }
   .control-stack,
-  .import-form,
   .details-content,
   .preset-stack {
     display: grid;
