@@ -1,38 +1,76 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
-  import { Button, Drawer, FileInput, Link, Panel, Select } from 'svelte-ascii-ui';
+  import { Button, FileInput, Link, Select } from 'svelte-ascii-ui';
 
   import { selectMode } from '@/shared/lib/renderer';
   import { asset, resolve } from '$app/paths';
 
   import { EditorModel } from '../model/editor.svelte';
-  import { modePresentation, type ToolSection } from '../model/mode-presentation';
-  import type { ranges } from '../model/settings';
+  import { MobileNavigation } from '../model/mobile-navigation.svelte';
+  import { modePresentation } from '../model/mode-presentation';
   import Controls from './Controls.svelte';
+  import { animateMobileLayout, captureMobileLayout } from './mobile-motion';
+  import MobileTools from './MobileTools.svelte';
   import ModePicker from './ModePicker.svelte';
-  import ParameterRange from './ParameterRange.svelte';
 
   const editor = new EditorModel();
+  const navigation = new MobileNavigation();
   let original: HTMLCanvasElement;
   let result: HTMLCanvasElement;
   const mobile = new MediaQuery(
     '(max-width: 760px), (max-width: 1000px) and (max-height: 500px) and (pointer: coarse)',
     false,
   );
+  const reducedMotion = new MediaQuery('(prefers-reduced-motion: reduce)', false);
+  let shell: HTMLDivElement;
+  let presentedTool = $state<App.PageState['hasciiEditor']>();
+  let initialPresentation = true;
+  let stopMotion: (() => void) | undefined;
+  let motionRevision = 0;
+  function cancelMotion() {
+    motionRevision++;
+    stopMotion?.();
+    stopMotion = undefined;
+  }
+  onDestroy(cancelMotion);
+  $effect(() => {
+    const next = navigation.view;
+    const allowMotion = mobile.current && !reducedMotion.current;
+    let cancelled = false;
+    untrack(() => {
+      const previous = presentedTool;
+      const fullScreen = [previous, next].some(
+        (tool) =>
+          tool?.section === 'photo' || tool?.detail === 'style' || tool?.detail === 'import',
+      );
+      const animate =
+        !initialPresentation &&
+        allowMotion &&
+        !fullScreen &&
+        previous?.section !== next?.section &&
+        typeof Element.prototype.animate === 'function';
+      const before = animate ? captureMobileLayout(shell, !next) : undefined;
+      cancelMotion();
+      const revision = motionRevision;
+      presentedTool = next;
+      if (before)
+        void tick().then(() => {
+          if (!cancelled && revision === motionRevision)
+            stopMotion = animateMobileLayout(shell, before);
+        });
+      initialPresentation = false;
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
   let selectedView = $state<string | null>(null);
-  type Parameter = keyof typeof ranges;
-  let parameter = $state<Parameter | null>(null);
-  const adjusting = $derived(mobile.current && parameter !== null);
+  const adjusting = $derived(mobile.current && presentedTool !== undefined);
   const view = $derived(
     adjusting ? 'result' : (selectedView ?? (mobile.current ? 'result' : 'side')),
   );
-  let toolsOpen = $state(false);
-  let section = $state<ToolSection>('style');
-  let toolsScroller = $state<HTMLDivElement>();
-  let returnScroll = 0;
   const sections = $derived(modePresentation(selectMode(editor.settings)).sections);
-  const sectionTitle = $derived(sections.find((item) => item.id === section)!.drawerTitle);
   let dragging = $state(false);
   const views = [
     { value: 'side', label: 'Рядом' },
@@ -41,41 +79,63 @@
   ];
   onMount(() => editor.mount(original, result));
 
-  async function editParameter(key: Parameter) {
-    returnScroll = toolsScroller?.scrollTop ?? 0;
-    parameter = key;
-    toolsOpen = false;
-    await tick();
-    document.getElementById('editor-shell')?.scrollIntoView({ block: 'start' });
-    document.getElementById(key)?.focus({ preventScroll: true });
-  }
-
-  async function backToSettings() {
-    const key = parameter;
-    parameter = null;
-    toolsOpen = true;
-    await tick();
-    if (toolsScroller) toolsScroller.scrollTop = returnScroll;
-    document.getElementById(`edit-${key}`)?.focus({ preventScroll: true });
-  }
-
-  function handleKeydown(event: KeyboardEvent) {
-    if (adjusting && event.key === 'Escape') {
-      event.preventDefault();
-      void backToSettings();
-    }
-  }
-
-  // Viewport changes end transient phone editing, without changing image settings.
+  let previousView: App.PageState['hasciiEditor'];
+  let focusParameter: string | undefined;
   $effect(() => {
-    if (!mobile.current) {
-      parameter = null;
-      toolsOpen = false;
-    }
+    const current = presentedTool;
+    const previous = previousView;
+    previousView = current;
+    let target: string | undefined;
+    if (previous && !current) target = `[data-tool="${previous.section}"]`;
+    else if (previous?.detail && current && !current.detail) {
+      target = focusParameter
+        ? `#${focusParameter}`
+        : previous.detail === 'palette'
+          ? '#palette'
+          : `[data-open-details="${previous.detail}"]`;
+      focusParameter = undefined;
+    } else if (
+      current &&
+      !current.detail &&
+      current.section !== 'photo' &&
+      previous?.section !== current.section
+    )
+      target = '.mobile-panel input:not(:disabled), .mobile-panel button:not(:disabled)';
+    if (target)
+      void tick().then(() =>
+        document.querySelector<HTMLElement>(target)?.focus({ preventScroll: true }),
+      );
   });
+  $effect(() => {
+    if (!mobile.current && navigation.view) navigation.leaveMobile();
+  });
+  $effect(() => {
+    const current = navigation.view;
+    if (!current?.detail) return;
+    const available =
+      current.detail === 'style'
+        ? current.section === 'style'
+        : current.section === 'color' &&
+          editor.settings.paletteEnabled &&
+          !['pixel-art', 'halftone'].includes(editor.settings.mode);
+    // Forward can restore a detail whose owning control is now unavailable.
+    if (!available) navigation.back();
+  });
+  function handleKeydown(event: KeyboardEvent) {
+    if (
+      event.key === 'Escape' &&
+      !event.defaultPrevented &&
+      adjusting &&
+      !navigation.view?.detail &&
+      navigation.view?.section !== 'photo'
+    ) {
+      event.preventDefault();
+      navigation.back();
+    }
+  }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onresize={cancelMotion} />
 
 {#snippet upload()}
   <section
@@ -113,7 +173,7 @@
   >
 {/snippet}
 
-<div id="editor-shell" class={['editor-shell', { adjusting }]}>
+<div id="editor-shell" bind:this={shell} class={['editor-shell', { adjusting }]}>
   <header class="app-header">
     <h1 class="brand">
       <img class="brand-image" src={asset('/hascii-mark.png')} alt="" width="900" height="656" />
@@ -132,9 +192,7 @@
   <main class="workspace">
     {#if !mobile.current}
       <aside class="aui-scrollbar" aria-label="Настройки изображения">
-        <div class="intro">
-          <p>Пиксели, символы и немного контролируемого шума.</p>
-        </div>
+        <div class="intro"><p>Пиксели, символы и немного контролируемого шума.</p></div>
         <Controls {editor} {upload} />
         <footer class="hint">
           Изображение остаётся на устройстве.<br />Только импорт палитры обращается к Lospec.
@@ -143,22 +201,60 @@
     {/if}
 
     <article class="preview-area aui-scrollbar" aria-label="Превью изображения">
-      <div class="toolbar">
-        {#if mobile.current && !toolsOpen && !adjusting}
+      {#if mobile.current && !adjusting}
+        <div class="mode-toolbar">
           <ModePicker
             value={editor.settings.mode}
             onchange={(mode) => editor.update('mode', mode)}
           />
-        {/if}
-        <span id="status" role="status">{editor.status}</span>
+        </div>
+      {/if}
+      <div id="previews" class="previews" data-view={view} aria-busy={!editor.canExport}>
+        <figure class="original-figure" hidden={view === 'result'}>
+          <figcaption>
+            <span>Оригинал</span><span id="sourceInfo">{editor.sourceInfo}</span>
+          </figcaption>
+          <div class="canvas-wrap">
+            <div class="preview-frame" aria-hidden="true"></div>
+            <canvas id="original" bind:this={original} aria-label="Исходное изображение"></canvas>
+          </div>
+        </figure>
+        <figure class="result-figure">
+          <figcaption>
+            <span>Результат</span><span id="outputInfo">{editor.outputInfo}</span>
+          </figcaption>
+          <div class="canvas-wrap">
+            <div class="preview-frame" aria-hidden="true"></div>
+            <canvas
+              id="result"
+              bind:this={result}
+              style:--result-aspect={editor.resultAspect}
+              aria-label="Обработанное изображение"
+            ></canvas>
+          </div>
+        </figure>
       </div>
+      <div class="result-summary">
+        <p id="recipe" class={['recipe', { 'ready-status': adjusting }]}>{editor.recipe}</p>
+        {#if adjusting}<p class="compact-recipe">{editor.compactRecipe}</p>{/if}
+        <div class="status-lane">
+          {#if editor.canExport && editor.renderMs !== null}<span class="render-time"
+              >{editor.renderMs} мс</span
+            >{/if}
+          <span id="status" class={{ 'ready-status': editor.canExport }} role="status"
+            >{editor.canExport ? 'Готово' : editor.status}</span
+          >
+        </div>
+      </div>
+      <p id="error" class="error" role="alert">{editor.error}</p>
+      {#if editor.storageWarning}<p class="error" role="status">{editor.storageWarning}</p>{/if}
       <div class="preview-toolbar" hidden={adjusting}>
         {#if mobile.current}
           <Select
             showPlaceholder={false}
             size="s"
             aria-label="Расположение превью"
-            options={views.map((item) => ({ value: item.value, label: item.label }))}
+            options={views}
             bind:value={() => view, (value) => (selectedView = value || 'result')}
           />
         {:else}
@@ -177,31 +273,6 @@
           <small class="hint">Расположение не влияет на PNG</small>
         {/if}
       </div>
-      <div id="previews" class="previews" data-view={view} aria-busy={!editor.canExport}>
-        <figure class="original-figure" hidden={view === 'result'}>
-          <figcaption>
-            <span>01 / ОРИГИНАЛ</span><span id="sourceInfo">{editor.sourceInfo}</span>
-          </figcaption>
-          <Panel size="s" style={adjusting ? 'display: flex; flex: 1; min-height: 0;' : undefined}
-            ><div class="canvas-wrap">
-              <canvas id="original" bind:this={original} aria-label="Исходное изображение"></canvas>
-            </div></Panel
-          >
-        </figure>
-        <figure>
-          <figcaption>
-            <span>02 / РЕЗУЛЬТАТ</span><span id="outputInfo">{editor.outputInfo}</span>
-          </figcaption>
-          <Panel size="s" style={adjusting ? 'display: flex; flex: 1; min-height: 0;' : undefined}
-            ><div class="canvas-wrap">
-              <canvas id="result" bind:this={result} aria-label="Обработанное изображение"></canvas>
-            </div></Panel
-          >
-        </figure>
-      </div>
-      <p id="recipe" class="recipe">{editor.recipe}</p>
-      <p id="error" class="error" role="alert">{editor.error}</p>
-      {#if editor.storageWarning}<p class="error" role="status">{editor.storageWarning}</p>{/if}
       <div class="note" hidden={adjusting}>
         <strong>Своя текстура, один шаг за раз.</strong>
         <p>
@@ -214,68 +285,39 @@
         </p>
       </div>
     </article>
+
+    {#if mobile.current}
+      <MobileTools
+        {editor}
+        open={adjusting}
+        section={presentedTool?.section ?? 'style'}
+        detail={presentedTool?.detail}
+        {upload}
+        ondetails={(detail) => navigation.details(detail)}
+        onedit={(key) => {
+          focusParameter = key;
+          navigation.back();
+        }}
+        onback={() => navigation.back()}
+        onclose={() => navigation.back()}
+      />
+    {/if}
   </main>
 
-  {#if adjusting && parameter}
-    <section class="parameter-editor" aria-label="Редактирование параметра">
-      <div class="parameter-heading">
-        <Button size="s" onclick={() => void backToSettings()} aria-label="Назад к настройкам">
-          Назад
-        </Button>
-        <span>Настройки применяются сразу</span>
-      </div>
-      <ParameterRange {editor} setting={parameter} />
-    </section>
-  {/if}
-
   {#if mobile.current}
-    {#if !adjusting}
-      <nav class="mobile-tools" aria-label="Инструменты изображения">
-        {#each sections as item (item.id)}
-          <Button
-            size="s"
-            fullWidth
-            style="min-height: 48px"
-            aria-haspopup="dialog"
-            data-tool={item.id}
-            onclick={(event) => {
-              event.currentTarget.focus();
-              section = item.id;
-              toolsOpen = true;
-            }}
-          >
-            {item.label}
-          </Button>
-        {/each}
-      </nav>
-    {/if}
-    <Drawer
-      data-mobile-settings
-      bind:open={toolsOpen}
-      title={sectionTitle}
-      closeLabel="Закрыть настройки"
-      style="width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);"
-    >
-      <div class="mobile-settings aui-scrollbar" bind:this={toolsScroller}>
-        <Controls
-          {editor}
-          {section}
-          {upload}
-          mobile
-          onedit={editParameter}
-          showModePicker={toolsOpen}
-        />
-        {#if editor.error}<p class="error" role="alert">{editor.error}</p>{/if}
-      </div>
-      {#snippet footer()}
-        <div class="mobile-settings-footer">
-          <span class="hint" role="status">{editor.status}</span>
-          <Button fullWidth size="m" style="min-height: 48px" onclick={() => (toolsOpen = false)}>
-            Показать результат
-          </Button>
-        </div>
-      {/snippet}
-    </Drawer>
+    <nav class="mobile-tools" aria-label="Инструменты изображения">
+      {#each sections as item (item.id)}
+        <Button
+          size="s"
+          fullWidth
+          style="min-height: 48px"
+          data-tool={item.id}
+          aria-pressed={presentedTool?.section === item.id}
+          variant={presentedTool?.section === item.id ? 'primary' : 'default'}
+          onclick={() => navigation.toggle(item.id)}>{item.label}</Button
+        >
+      {/each}
+    </nav>
   {/if}
 </div>
 
@@ -283,65 +325,6 @@
   .editor-shell {
     min-height: 100dvh;
   }
-  .editor-shell.adjusting {
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .parameter-editor {
-    flex: 0 0 auto;
-    padding: 12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom))
-      max(12px, env(safe-area-inset-left));
-    border-top: 1px dashed var(--muted);
-    background: var(--bg);
-    display: grid;
-    gap: 12px;
-  }
-  .parameter-heading {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 11px;
-    color: var(--muted);
-  }
-  .parameter-heading span {
-    text-align: end;
-  }
-  .preview-toolbar[hidden] {
-    display: none;
-  }
-  .mobile-tools {
-    position: fixed;
-    inset-inline: 0;
-    bottom: 0;
-    z-index: 10;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
-    padding: 10px max(8px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom))
-      max(8px, env(safe-area-inset-left));
-    background: var(--bg);
-    border-top: 1px dashed var(--muted);
-  }
-  .mobile-settings {
-    height: 100%;
-    overflow: auto;
-    align-content: start;
-    overscroll-behavior: contain;
-    min-width: 0;
-    display: grid;
-    gap: 16px;
-    padding-block: 8px;
-  }
-  .mobile-settings-footer {
-    width: 100%;
-    display: grid;
-    gap: 8px;
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
   .app-header {
     min-height: 88px;
     display: flex;
@@ -399,28 +382,24 @@
     padding: 28px;
     min-width: 0;
   }
-  .toolbar,
+  .mode-toolbar {
+    margin-bottom: 10px;
+  }
   .preview-toolbar {
     display: flex;
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 20px;
+    margin-top: 16px;
+    font-size: 11px;
   }
-  .toolbar {
-    justify-content: space-between;
+  .preview-toolbar[hidden] {
+    display: none;
   }
   .button-row {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-  }
-  #status {
-    font-size: 11px;
-    color: var(--muted);
-  }
-  .preview-toolbar {
-    font-size: 11px;
   }
   .previews {
     display: grid;
@@ -442,30 +421,84 @@
     justify-content: space-between;
     gap: 8px;
     color: var(--muted);
-    font-size: 10px;
-    margin-bottom: 10px;
+    font-size: 11px;
+    margin-bottom: 6px;
   }
   .canvas-wrap {
+    position: relative;
     display: grid;
     place-items: center;
     min-height: 100px;
+    padding: 1px;
+  }
+  .preview-frame {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    border: 1px dashed var(--muted);
     background: repeating-conic-gradient(#ffffff05 0% 25%, transparent 0% 50%) 0 / 16px 16px;
   }
   canvas {
+    position: relative;
+    z-index: 1;
     display: block;
     width: 100%;
     height: auto;
     image-rendering: pixelated;
   }
+  .result-summary {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.7;
+    padding-top: 6px;
+  }
   .recipe {
     color: var(--accent);
     font-size: 11px;
     line-height: 1.7;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .status-lane {
+    display: flex;
+    justify-content: end;
+    align-items: baseline;
+    min-width: 0;
+  }
+  .compact-recipe {
+    margin: 0;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.7;
+  }
+  .render-time {
+    color: var(--muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  #status {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .ready-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .error {
     color: var(--danger);
     font-size: 12px;
     line-height: 1.6;
+    overflow-wrap: anywhere;
   }
   .error:empty {
     display: none;
@@ -485,6 +518,19 @@
     color: var(--muted);
     font-size: 11px;
     line-height: 1.7;
+  }
+  .mobile-tools {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px max(8px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+    background: color-mix(in srgb, var(--bg), var(--text) 4%);
+    border-top: 1px dashed var(--muted);
   }
   @media (min-width: 1000px) {
     aside,
@@ -506,9 +552,9 @@
   }
   @media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) and (pointer: coarse) {
     .app-header {
-      min-height: 72px;
-      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 12px
-        max(12px, env(safe-area-inset-left));
+      min-height: 64px;
+      padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px
+        max(10px, env(safe-area-inset-left));
       gap: 8px;
     }
     .brand {
@@ -519,14 +565,14 @@
     .workspace {
       display: flex;
       flex-direction: column;
-      padding-bottom: calc(88px + env(safe-area-inset-bottom));
+      padding-bottom: calc(64px + env(safe-area-inset-bottom));
     }
     aside {
       border-right: none;
       padding: 20px 16px;
     }
     .preview-area {
-      padding: 16px 12px;
+      padding: 10px;
     }
     .note {
       display: none;
@@ -535,25 +581,26 @@
       display: grid;
       grid-template-columns: minmax(0, 1fr);
       gap: 8px;
+      margin-top: 10px;
     }
     .previews[data-view='side'] {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .previews[data-view='result'] canvas {
-      max-height: 55dvh;
+      width: min(100%, calc(58dvh * var(--result-aspect, 1)));
+      max-height: 58dvh;
       object-fit: contain;
     }
-    .toolbar {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .recipe {
-      overflow-wrap: anywhere;
+    .editor-shell.adjusting {
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
     .adjusting .app-header {
       flex: 0 0 auto;
+      min-height: 56px;
+      padding-block: 4px;
     }
     .adjusting .workspace {
       flex: 1;
@@ -565,10 +612,7 @@
       min-height: 0;
       display: flex;
       flex-direction: column;
-      padding-block: 8px;
-    }
-    .adjusting .toolbar {
-      margin-bottom: 6px;
+      padding-block: 4px;
     }
     .adjusting .previews {
       flex: 1;
@@ -583,6 +627,7 @@
       flex-direction: column;
     }
     .adjusting .canvas-wrap {
+      container-type: size;
       position: relative;
       flex: 1;
       min-height: 0;
@@ -592,43 +637,40 @@
     .adjusting .previews[data-view='result'] canvas {
       position: absolute;
       inset: 0;
-      width: 100%;
-      height: 100%;
+      margin: auto;
+      width: min(100cqw, calc(100cqh * var(--result-aspect)));
+      height: auto;
       min-height: 0;
-      max-height: none;
+      max-width: 100%;
+      max-height: 100%;
       object-fit: contain;
     }
-    .adjusting .recipe {
+    .adjusting .result-summary {
       flex: 0 0 auto;
-      margin-block: 6px 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 14ch;
+      align-items: baseline;
+      min-height: 23px;
+      padding-top: 4px;
+    }
+    .adjusting .mobile-tools {
+      position: static;
+      flex: 0 0 auto;
+    }
+    .adjusting figcaption {
+      margin-bottom: 4px;
     }
   }
   @media (max-width: 1000px) and (max-height: 500px) and (orientation: landscape) {
-    .editor-shell.adjusting {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(240px, 36%);
-      grid-template-rows: auto minmax(0, 1fr);
+    .adjusting .workspace {
+      flex-direction: row;
     }
     .adjusting .app-header {
-      grid-column: 1 / -1;
-      min-height: 56px;
-      padding-block: 6px;
-    }
-    .adjusting .parameter-editor {
-      min-width: 0;
-      overflow: auto;
-      align-content: center;
-      border-top: none;
-      border-left: 1px dashed var(--muted);
-    }
-    .adjusting .parameter-heading {
-      flex-wrap: wrap;
-    }
-    .adjusting .parameter-heading span {
-      text-align: start;
+      min-height: 52px;
+      padding-block: 4px;
     }
     .adjusting figcaption {
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     .adjusting .recipe {
       font-size: 10px;

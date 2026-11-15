@@ -2,10 +2,58 @@ import { describe, expect, it } from 'vitest';
 
 import { selectMode } from '@/shared/lib/renderer';
 
-import { formatRecipe, modeChoices, modePresentation } from './mode-presentation';
+import {
+  formatRecipe,
+  mobileStyleRanges,
+  modeChoices,
+  modePresentation,
+} from './mode-presentation';
 import { defaults } from './settings';
 
 describe('mode presentation', () => {
+  it('offers only effective numeric style settings to the live mobile panel', () => {
+    expect(mobileStyleRanges(defaults)).toEqual(['artColumns', 'artIterations']);
+    expect(mobileStyleRanges({ ...defaults, mode: 'pixels' })).toEqual(['pixelSize']);
+    expect(mobileStyleRanges({ ...defaults, mode: 'pixels', pixelate: false })).toEqual([]);
+    expect(mobileStyleRanges({ ...defaults, mode: 'halftone' })).toEqual([
+      'halftoneSize',
+      'halftoneAngle',
+    ]);
+    expect(mobileStyleRanges({ ...defaults, mode: 'halftone', halftoneColor: 'duotone' })).toEqual([
+      'halftoneSize',
+      'halftoneAngle',
+      'halftoneAngleB',
+      'halftoneOffsetX',
+      'halftoneOffsetY',
+    ]);
+  });
+  it('keeps long symbol groups selectable while excluding disabled and unrelated fields', () => {
+    expect(mobileStyleRanges({ ...defaults, mode: 'ascii' })).toEqual([
+      'fontSize',
+      'gapX',
+      'gapY',
+      'emptyThreshold',
+      'opacity',
+    ]);
+    expect(
+      mobileStyleRanges({ ...defaults, mode: 'overlay', matching: 'shape', allowEmpty: false }),
+    ).toEqual(['fontSize', 'overlayFill', 'shapeWeight', 'gapX', 'gapY', 'opacity']);
+    expect(mobileStyleRanges({ ...defaults, mode: 'ascii-fx' })).toEqual([
+      'cellSize',
+      'cellAspect',
+      'gapX',
+      'gapY',
+      'emptyThreshold',
+      'backgroundOpacity',
+      'opacity',
+    ]);
+    expect(mobileStyleRanges({ ...defaults, mode: 'png2xp' })).toEqual([
+      'cellSize',
+      'cellAspect',
+      'backgroundOpacity',
+      'opacity',
+    ]);
+  });
   it('keeps the established choices and order', () => {
     expect(modeChoices).toEqual([
       { value: 'pixel-art', label: 'Pixel Art' },

@@ -12,17 +12,19 @@
     section,
     mobile = false,
     onedit,
+    detailsOpen = $bindable(false),
   }: {
     editor: EditorModel;
     section: 'style' | 'color';
     mobile?: boolean;
     onedit?: (key: keyof typeof ranges) => void;
+    detailsOpen?: boolean;
   } = $props();
   type ColorKey = 'halftoneInk' | 'halftoneInkB' | 'halftonePaper';
 </script>
 
 {#snippet range(setting: keyof typeof ranges)}
-  <ParameterRange {editor} {setting} compact={mobile} {onedit} />
+  <ParameterRange {editor} {setting} compact={mobile} dense={mobile && !onedit} {onedit} />
 {/snippet}
 
 {#snippet ink(key: ColorKey, label: string)}
@@ -62,7 +64,7 @@
           />
         {/snippet}
       </Field>
-      <details data-details="style">
+      <details data-details="style" bind:open={detailsOpen}>
         <summary>Углы и совмещение</summary>
         <div class="details-content">
           {@render range('halftoneAngle')}
@@ -115,7 +117,7 @@
     {#if section === 'style'}
       {@render range('artColumns')}
       <p>Высота сохраняет пропорции фото. PNG сохраняется в рабочем размере с чёткими пикселями.</p>
-      <details data-details="style">
+      <details data-details="style" bind:open={detailsOpen}>
         <summary>Уточнение деталей</summary>
         <div class="details-content">
           {@render range('artIterations')}

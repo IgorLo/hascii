@@ -3,7 +3,15 @@ import { readFile } from 'node:fs/promises';
 import { Canvas } from '@napi-rs/canvas';
 import { expect, type Page, test } from '@playwright/test';
 
-import { closeTools, expectRange, selectMode, setRange, tools } from './helpers/editor';
+import {
+  closeImport,
+  closeTools,
+  expectRange,
+  openImport,
+  selectMode,
+  setRange,
+  tools,
+} from './helpers/editor';
 
 async function preview(page: Page, value: string) {
   await closeTools(page);
@@ -225,9 +233,11 @@ test('imports and persists a palette and recovers from import errors', async ({ 
     }),
   );
   await tools(page, 'color');
+  await openImport(page);
   await page.locator('#paletteUrl').fill('https://lospec.com/palette-list/test-palette');
   await page.locator('#import').click();
   await expect(page.locator('#importStatus')).toContainText('Добавлена');
+  await closeImport(page);
   await expect(page.locator('#palette')).toContainText('Test Palette');
   await page.reload();
   await selectMode(page, 'pixels');
@@ -239,6 +249,7 @@ test('imports and persists a palette and recovers from import errors', async ({ 
       .getByRole('button', { name: 'Test Palette · 3 цветов', exact: true }),
   ).toHaveCount(1);
   await page.keyboard.press('Escape');
+  await openImport(page);
   await page.locator('#paletteUrl').fill('https://example.com/wrong');
   await page.locator('#import').click();
   await expect(page.locator('#importStatus')).toContainText('lospec.com');
@@ -357,9 +368,18 @@ test('mobile preview, tools and focus fit narrow screens', async ({ page }) => {
     await expectThemedScrollbars(page);
     for (const section of ['photo', 'style', 'color', 'tone'] as const) {
       await tools(page, section);
-      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(
+        page.getByRole(section === 'style' || section === 'photo' ? 'dialog' : 'region', {
+          name:
+            section === 'style'
+              ? 'Подробности стиля'
+              : section === 'photo'
+                ? 'Фото'
+                : `Инструменты: ${section === 'color' ? 'Цвет' : 'Тон'}`,
+        }),
+      ).toBeVisible();
       const overflow = await page.evaluate(() => {
-        const dialog = document.querySelector('dialog[open]')!;
+        const dialog = document.querySelector('dialog[open], .mobile-panel')!;
         const elements = [
           document.documentElement,
           dialog,
@@ -378,6 +398,7 @@ test('mobile preview, tools and focus fit narrow screens', async ({ page }) => {
       await expectThemedScrollbars(page);
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).not.toBeVisible();
+      await closeTools(page);
       await expect(page.locator(`[data-tool="${section}"]`)).toBeFocused();
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(

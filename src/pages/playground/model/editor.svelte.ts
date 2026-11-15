@@ -4,7 +4,7 @@ import { builtInPalettes, parsePaletteSlug, validPalette } from '@/shared/lib/pa
 import { type Palette, type Result, selectMode, type Settings } from '@/shared/lib/renderer';
 
 import { decodePhoto } from './image-import';
-import { formatRecipe } from './mode-presentation';
+import { formatRecipe, modeChoices } from './mode-presentation';
 import { RenderController } from './render-controller';
 import { defaults, presetSettings } from './settings';
 
@@ -16,8 +16,11 @@ export class EditorModel {
   storageWarning = $state('');
   sourceInfo = $state('—');
   outputInfo = $state('—');
+  resultAspect = $state(1);
   recipe = $state('Загрузка…');
+  compactRecipe = $state('');
   canExport = $state(false);
+  renderMs = $state<number | null>(null);
   importing = $state(false);
   importStatus = $state('Импортированные палитры сохраняются в этом браузере.');
   private imported: Palette[] = [];
@@ -84,13 +87,16 @@ export class EditorModel {
     this.resultCanvas.height = result.image.height;
     this.resultCanvas.getContext('2d')?.putImageData(result.image, 0, 0);
     this.outputInfo = `${result.image.width} × ${result.image.height}`;
+    this.resultAspect = result.image.width / result.image.height;
     this.status = `Готово · ${Math.round(result.ms)} мс`;
+    this.renderMs = Math.round(result.ms);
     this.canExport = true;
     const mode = selectMode(this.settings);
     const paletteName = mode.paletteEnabled
       ? this.palettes.find((p) => p.id === this.settings.palette)!.name
       : '';
     this.recipe = formatRecipe(mode, result, paletteName);
+    this.compactRecipe = `${modeChoices.find((item) => item.value === mode.id)!.label} · ${result.columns} × ${result.rows}`;
   }
 
   update<K extends keyof Settings>(key: K, value: Settings[K]) {
